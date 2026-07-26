@@ -21,12 +21,15 @@ import {
   IconBolt,
   IconBook2,
   IconBrain,
+  IconCalendar,
   IconCheck,
   IconChevronRight,
+  IconClock,
   IconCode,
   IconCrown,
   IconDownload,
   IconEdit,
+  IconHash,
   IconInfoCircle,
   IconLoader2,
   IconLock,
@@ -39,6 +42,7 @@ import {
   IconServer,
   IconShield,
   IconSparkles,
+  IconStarFilled,
   IconTrash,
   IconUpload,
   IconUser,
@@ -139,21 +143,29 @@ const NAV: Array<{ value: TabKey; label: string; icon: PanelIcon }> = [
 ]
 
 const PERSONALITIES = [
-  { value: "skye", label: "Skye", description: "Calm, warm, and concise." },
+  {
+    value: "skye",
+    label: "Skye",
+    description: "Calm, warm, and concise.",
+    icon: IconSparkles,
+  },
   {
     value: "skye.exe",
     label: "Skye.exe",
     description: "Chaotic, playful energy.",
+    icon: IconCode,
   },
   {
     value: "operator",
     label: "Operator",
     description: "Focused and decisive.",
+    icon: IconShield,
   },
   {
     value: "muse",
     label: "Muse",
     description: "A curious creative co-author.",
+    icon: IconBrain,
   },
 ] as const
 
@@ -244,6 +256,7 @@ export function PanelApp() {
   const [admins, setAdmins] = useState<AdminPrincipalsResponse | null>(null)
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   const [monitoring, setMonitoring] = useState<Monitoring | null>(null)
+  const [monitoringFailed, setMonitoringFailed] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState("")
@@ -346,16 +359,23 @@ export function PanelApp() {
   }, [load])
 
   useEffect(() => {
-    if (tab !== "activity" || !about?.isAdmin || monitoring) return
+    if (
+      tab !== "activity" ||
+      !about?.isAdmin ||
+      monitoring ||
+      monitoringFailed
+    )
+      return
     Promise.all([api.getMonitoring(), api.getAuditEvents()])
       .then(([health, events]) => {
         setMonitoring(health)
         setAuditEvents(events)
       })
-      .catch((error) =>
+      .catch((error) => {
+        setMonitoringFailed(true)
         toast.error(error instanceof Error ? error.message : String(error))
-      )
-  }, [about?.isAdmin, monitoring, tab])
+      })
+  }, [about?.isAdmin, monitoring, monitoringFailed, tab])
 
   useEffect(() => {
     if (!agentsOpen || agents) return
@@ -538,8 +558,7 @@ export function PanelApp() {
         }}
         className="relative mx-auto min-h-dvh w-full max-w-5xl"
       >
-        <main className="px-4 pt-[calc(var(--safe-top)+1.5rem)] pb-[calc(var(--safe-bottom)+7.5rem)] sm:px-6">
-          <BrandStrip user={user} account={account} />
+        <main className="px-4 pt-[calc(var(--safe-top)+1.25rem)] pb-[calc(var(--safe-bottom)+6.5rem)] sm:px-6">
           <TabsContent value="profile" className="animate-panel-in">
             <ProfileView
               user={user}
@@ -595,29 +614,33 @@ export function PanelApp() {
             <ActivityView
               stats={stats}
               monitoring={monitoring}
+              monitoringFailed={monitoringFailed}
               events={auditEvents}
               isAdmin={about?.isAdmin ?? false}
             />
           </TabsContent>
         </main>
 
-        <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-xl px-3 pb-[calc(var(--safe-bottom)+0.65rem)]">
-          <TabsList className="panel-card h-auto w-full rounded-[1.4rem] border p-1.5">
+        <nav
+          aria-label="Panel sections"
+          className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-xl px-3 pb-[calc(var(--safe-bottom)+0.55rem)]"
+        >
+          <TabsList className="panel-card h-16! w-full rounded-[1.35rem] border border-border/70 bg-card/92 p-1.5 shadow-2xl shadow-foreground/10">
             {NAV.map(({ value, label, icon: NavIcon }) => (
               <TabsTrigger
                 key={value}
                 value={value}
                 aria-label={label}
-                className="h-12 min-w-0 flex-col gap-0.5 rounded-2xl px-1 text-[10px] sm:flex-row sm:gap-2 sm:text-xs"
+                className="h-full min-w-0 flex-col gap-1 rounded-[1rem] px-1 text-[10px] font-semibold data-active:bg-primary data-active:text-primary-foreground dark:data-active:border-transparent dark:data-active:bg-primary dark:data-active:text-primary-foreground"
               >
-                <NavIcon className="size-[18px]" />
+                <NavIcon className="size-[19px]" />
                 <span className="truncate">
                   {value === "plus" && !plans?.enabled ? "Models" : label}
                 </span>
               </TabsTrigger>
             ))}
           </TabsList>
-        </div>
+        </nav>
       </Tabs>
 
       <AboutSheet about={about} open={aboutOpen} onOpenChange={setAboutOpen} />
@@ -648,39 +671,6 @@ export function PanelApp() {
       />
       <Toaster position="top-center" />
     </>
-  )
-}
-
-function BrandStrip({
-  user,
-  account,
-}: {
-  user: { name: string; handle: string }
-  account: BillingAccount | null
-}) {
-  return (
-    <div className="mb-10 flex items-center justify-between gap-4">
-      <div className="flex items-center gap-3">
-        <Avatar className="size-10 border bg-primary text-primary-foreground">
-          <AvatarFallback className="bg-primary font-heading text-lg text-primary-foreground">
-            S
-          </AvatarFallback>
-        </Avatar>
-        <div>
-          <p className="font-heading text-xl leading-none">Skye</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {user.handle || user.name}
-          </p>
-        </div>
-      </div>
-      <Badge
-        variant={account?.hasActiveSub ? "default" : "secondary"}
-        className="rounded-full px-3"
-      >
-        {account?.hasActiveSub ? <IconSparkles /> : <IconMessageCircle />}
-        {account?.hasActiveSub ? "Plus active" : "Online"}
-      </Badge>
-    </div>
   )
 }
 
@@ -720,6 +710,7 @@ function ProfileView({
   const personality = PERSONALITIES.find(
     (item) => item.value === (config.personality ?? "skye")
   )
+  const PersonalityIcon = personality?.icon ?? IconSparkles
 
   return (
     <>
@@ -767,11 +758,15 @@ function ProfileView({
               }
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  <PersonalityIcon />
+                  {personality?.label ?? "Skye"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {PERSONALITIES.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
+                    <item.icon />
                     {item.label}
                   </SelectItem>
                 ))}
@@ -926,24 +921,24 @@ function ConnectorsView({
         }
       />
       <Card className="panel-card mb-3 rounded-3xl">
-        <CardContent className="flex items-center gap-4 p-5">
-          <span className="flex size-12 items-center justify-center rounded-2xl bg-primary/12 text-primary">
-            <IconBolt className="size-6" />
+        <CardContent className="flex items-center gap-3 p-4">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/12 text-primary">
+            <IconBolt className="size-5" />
           </span>
           <div>
-            <p className="font-heading text-2xl">
+            <p className="font-heading text-xl">
               {connected ? `${connected} connected` : "Ready when you are"}
             </p>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               OAuth credentials never pass through the panel.
             </p>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-3">
         {!data.managed.enabled ? (
-          <Alert className="rounded-3xl sm:col-span-2 lg:col-span-3">
+          <Alert className="col-span-2 rounded-3xl lg:col-span-3">
             <IconLock />
             <AlertTitle>Managed apps are off</AlertTitle>
             <AlertDescription>
@@ -951,7 +946,7 @@ function ConnectorsView({
             </AlertDescription>
           </Alert>
         ) : data.managed.connectors.length === 0 ? (
-          <Alert className="rounded-3xl sm:col-span-2 lg:col-span-3">
+          <Alert className="col-span-2 rounded-3xl lg:col-span-3">
             <IconWorld />
             <AlertTitle>
               {data.managedUnavailable
@@ -964,11 +959,11 @@ function ConnectorsView({
           </Alert>
         ) : (
           data.managed.connectors.map((connector) => (
-            <Card key={connector.slug} className="panel-card rounded-3xl">
-              <CardContent className="flex h-full flex-col p-5">
-                <div className="mb-7 flex items-start justify-between gap-3">
-                  <span className="relative flex size-11 items-center justify-center overflow-hidden rounded-2xl bg-secondary">
-                    <IconWorld />
+            <Card key={connector.slug} className="panel-card rounded-2xl">
+              <CardContent className="flex h-full min-h-44 flex-col p-3.5">
+                <div className="mb-4 flex items-start justify-between gap-2">
+                  <span className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-secondary">
+                    <IconWorld className="size-4" />
                     {connector.logo && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -980,17 +975,21 @@ function ConnectorsView({
                   </span>
                   <Badge
                     variant={connector.connected ? "default" : "secondary"}
+                    className="max-w-20 truncate px-2 text-[10px]"
                   >
                     {connector.connected ? "Connected" : "Available"}
                   </Badge>
                 </div>
-                <h2 className="font-heading text-2xl">{connector.name}</h2>
-                <p className="mt-1 mb-5 text-xs text-muted-foreground">
+                <h2 className="truncate font-heading text-xl">
+                  {connector.name}
+                </h2>
+                <p className="mt-0.5 mb-3 line-clamp-2 text-[11px] text-muted-foreground">
                   {connector.status ?? "Secure app connection"}
                 </p>
                 <Button
                   variant={connector.connected ? "outline" : "default"}
-                  className="mt-auto w-full"
+                  size="sm"
+                  className="mt-auto w-full text-xs"
                   disabled={busy}
                   onClick={() => onManaged(connector.slug, connector.connected)}
                 >
@@ -1069,8 +1068,30 @@ function MemoryView({
   onReload: () => void
 }) {
   const importRef = useRef<HTMLInputElement>(null)
+  const chatGroups = Array.from(
+    memories.reduce((groups, memory) => {
+      const group = groups.get(memory.chatId) ?? {
+        id: memory.chatId,
+        name: memory.chatName || `Chat ${memory.chatId}`,
+        memories: [] as Memory[],
+      }
+      group.memories.push(memory)
+      groups.set(memory.chatId, group)
+      return groups
+    }, new Map<number, { id: number; name: string; memories: Memory[] }>())
+  ).map(([, group]) => group)
+  const [activeChat, setActiveChat] = useState("")
+  const visibleChat = chatGroups.some(
+    (group) => String(group.id) === activeChat
+  )
+    ? activeChat
+    : String(chatGroups[0]?.id ?? "")
+
   const filtered = memories.filter((memory) =>
-    memory.content.toLocaleLowerCase().includes(search.toLocaleLowerCase())
+    [memory.content, memory.chatName, String(memory.chatId)]
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(search.toLocaleLowerCase())
   )
 
   const exportAll = async () => {
@@ -1161,50 +1182,100 @@ function MemoryView({
         />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {filtered.length === 0 ? (
-          <Card className="panel-card rounded-3xl md:col-span-2">
-            <CardContent className="flex min-h-52 flex-col items-center justify-center p-8 text-center">
-              <IconBook2 className="mb-4 size-8 text-primary" />
-              <p className="font-heading text-2xl">
-                {memories.length ? "No matches" : "A blank page, for now."}
-              </p>
-              <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-                {memories.length
-                  ? "Try a different word."
-                  : "Ask Skye to remember something in a chat and it will appear here."}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          filtered.map((memory) => (
-            <Card
-              key={`${memory.chatId}-${memory.id}`}
-              className="panel-card rounded-3xl"
-            >
-              <CardContent className="flex h-full flex-col p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <Badge variant="secondary" className="capitalize">
-                    {memory.category}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Delete memory"
-                    onClick={() => onDelete(memory)}
-                  >
-                    <IconTrash className="text-destructive" />
-                  </Button>
+      {memories.length === 0 ? (
+        <Card className="panel-card rounded-3xl">
+          <CardContent className="flex min-h-52 flex-col items-center justify-center p-8 text-center">
+            <IconBook2 className="mb-4 size-8 text-primary" />
+            <p className="font-heading text-2xl">A blank page, for now.</p>
+            <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+              Ask Skye to remember something in a chat and it will appear here.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Tabs
+          value={visibleChat}
+          onValueChange={setActiveChat}
+          className="gap-3"
+        >
+          <TabsList className="panel-no-scrollbar h-auto! w-full justify-start overflow-x-auto rounded-2xl bg-muted/70 p-1.5">
+            {chatGroups.map((group) => (
+              <TabsTrigger
+                key={group.id}
+                value={String(group.id)}
+                className="h-auto min-w-36 flex-none items-start rounded-xl px-3 py-2 text-left"
+              >
+                <span className="min-w-0">
+                  <span className="block max-w-40 truncate text-xs font-semibold text-foreground">
+                    {group.name}
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[10px] text-muted-foreground">
+                    {group.id}
+                  </span>
+                </span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {chatGroups.map((group) => {
+            const visible = filtered.filter(
+              (memory) => memory.chatId === group.id
+            )
+            return (
+              <TabsContent
+                key={group.id}
+                value={String(group.id)}
+                className="animate-panel-in"
+              >
+                <div className="grid grid-cols-2 gap-2.5">
+                  {visible.length === 0 ? (
+                    <Card className="panel-card col-span-2 rounded-3xl">
+                      <CardContent className="flex min-h-40 flex-col items-center justify-center p-6 text-center">
+                        <IconSearch className="mb-3 size-6 text-primary" />
+                        <p className="font-heading text-xl">No matches</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Try another word in this chat.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    visible.map((memory) => (
+                      <Card
+                        key={`${memory.chatId}-${memory.id}`}
+                        className="panel-card rounded-2xl"
+                      >
+                        <CardContent className="flex h-full min-h-40 flex-col p-3.5">
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <Badge
+                              variant="secondary"
+                              className="px-2 text-[10px] capitalize"
+                            >
+                              {memory.category}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label="Delete memory"
+                              onClick={() => onDelete(memory)}
+                            >
+                              <IconTrash className="size-4 text-destructive" />
+                            </Button>
+                          </div>
+                          <p className="line-clamp-6 text-[13px] leading-5">
+                            {memory.content}
+                          </p>
+                          <p className="mt-auto pt-4 text-[10px] text-muted-foreground">
+                            {formatDate(memory.createdAt)}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
                 </div>
-                <p className="text-[15px] leading-6">{memory.content}</p>
-                <p className="mt-auto pt-6 text-xs text-muted-foreground">
-                  Chat {memory.chatId} · {formatDate(memory.createdAt)}
-                </p>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+              </TabsContent>
+            )
+          })}
+        </Tabs>
+      )}
     </>
   )
 }
@@ -1233,6 +1304,13 @@ function PlusView({
   const remainingPercent = quota
     ? Math.max(0, Math.min(100, (remaining / quota) * 100))
     : 0
+  const activeModel = models.find((model) => model.id === activeModelId)
+  const boostStyles = [
+    "border-sky-500/25 bg-sky-500/10 hover:bg-sky-500/15",
+    "border-violet-500/25 bg-violet-500/10 hover:bg-violet-500/15",
+    "border-amber-500/30 bg-amber-500/12 hover:bg-amber-500/20",
+    "border-rose-500/25 bg-rose-500/10 hover:bg-rose-500/15",
+  ]
 
   return (
     <>
@@ -1252,7 +1330,11 @@ function PlusView({
           <CardContent className="relative grid gap-8 p-6 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
               <Badge className="mb-6 bg-white/15 text-white">
-                {account?.hasActiveSub ? "Active plan" : "Skye Plus"}
+                {account?.hasActiveSub
+                  ? account.subStatus === "cancelled"
+                    ? "Cancels soon"
+                    : "Active plan"
+                  : "Skye Plus"}
               </Badge>
               <h2 className="font-heading text-4xl">
                 {account?.hasActiveSub
@@ -1305,7 +1387,11 @@ function PlusView({
             disabled={busy}
           >
             <SelectTrigger className="h-12 w-full">
-              <SelectValue />
+              <SelectValue>
+                {activeModel
+                  ? `${activeModel.name} · ${activeModel.multiplier}×`
+                  : "Choose a model"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {models.map((model) => (
@@ -1327,11 +1413,11 @@ function PlusView({
             <CardDescription>Extra tokens for a busy month.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
-            {plans.packs.map((pack) => (
+            {plans.packs.map((pack, index) => (
               <Button
                 key={pack.id}
-                variant="secondary"
-                className="h-auto justify-between px-4 py-4"
+                variant="outline"
+                className={`h-auto justify-between border px-4 py-4 ${boostStyles[Math.min(index, boostStyles.length - 1)]}`}
                 disabled={busy}
                 onClick={() => onPurchase(pack.id)}
               >
@@ -1341,7 +1427,10 @@ function PlusView({
                     +{formatTokens(pack.tokens)} tokens
                   </span>
                 </span>
-                <span>{pack.stars} ⭐</span>
+                <Badge className="ml-3 h-9 rounded-xl bg-foreground px-3 text-sm text-background shadow-sm hover:bg-foreground">
+                  <IconStarFilled className="size-4 text-amber-400" />
+                  {pack.stars}
+                </Badge>
               </Button>
             ))}
           </CardContent>
@@ -1351,7 +1440,11 @@ function PlusView({
       {plans?.enabled &&
         account?.hasActiveSub &&
         account.subStatus !== "cancelled" && (
-          <Button variant="destructive" className="mt-5" onClick={onCancel}>
+          <Button
+            variant="destructive"
+            className="mt-5 w-full sm:w-auto"
+            onClick={onCancel}
+          >
             Cancel subscription
           </Button>
         )}
@@ -1362,14 +1455,22 @@ function PlusView({
 function ActivityView({
   stats,
   monitoring,
+  monitoringFailed,
   events,
   isAdmin,
 }: {
   stats: Stats
   monitoring: Monitoring | null
+  monitoringFailed: boolean
   events: AuditEvent[]
   isAdmin: boolean
 }) {
+  const pageSize = 10
+  const [auditPage, setAuditPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(events.length / pageSize))
+  const page = Math.min(auditPage, pageCount)
+  const visibleEvents = events.slice((page - 1) * pageSize, page * pageSize)
+
   const metrics = [
     {
       label: "All requests",
@@ -1414,22 +1515,39 @@ function ActivityView({
 
       {isAdmin && (
         <Card className="panel-card mt-3 rounded-3xl">
-          <CardHeader className="flex-row items-start justify-between">
-            <div>
-              <CardTitle className="font-heading text-2xl">
-                System activity
-              </CardTitle>
-              <CardDescription>
+          <CardHeader>
+            <CardTitle className="font-heading text-2xl">
+              System activity
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Badge
+                className={
+                  monitoring
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : monitoringFailed
+                      ? "bg-destructive/12 text-destructive"
+                    : ""
+                }
+                variant={
+                  monitoring || monitoringFailed ? "secondary" : "outline"
+                }
+              >
                 {monitoring
-                  ? `Healthy for ${formatDuration(monitoring.uptimeSeconds)}`
-                  : "Loading operational activity…"}
-              </CardDescription>
+                  ? "Healthy"
+                  : monitoringFailed
+                    ? "Failed"
+                    : "Checking"}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {monitoring
+                  ? `for ${formatDuration(monitoring.uptimeSeconds)}`
+                  : monitoringFailed
+                    ? "during the latest check"
+                  : "operational status"}
+              </span>
             </div>
-            <Badge variant={monitoring ? "default" : "secondary"}>
-              {monitoring ? "Healthy" : "Loading"}
-            </Badge>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             {monitoring && events.length === 0 ? (
               <p className="rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">
                 No recent events.
@@ -1440,51 +1558,290 @@ function ActivityView({
                 <Skeleton className="h-16 rounded-2xl" />
               </div>
             ) : (
-              <Accordion>
-                {events.slice(0, 30).map((event) => (
-                  <AccordionItem key={`${event.kind}-${event.id}`}>
-                    <AccordionTrigger>
-                      <span className="flex min-w-0 items-center gap-3">
-                        <Badge variant="outline" className="capitalize">
-                          {event.kind}
-                        </Badge>
-                        <span className="truncate capitalize">
-                          {event.action.replaceAll("_", " ")}
-                        </span>
-                      </span>
-                      <span className="ml-auto hidden shrink-0 text-xs font-normal text-muted-foreground sm:block">
-                        {formatDate(event.ts)}
-                      </span>
-                    </AccordionTrigger>
-                    <AccordionContent>
-                      <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
-                        <p>Model: {event.model ?? "—"}</p>
-                        <p>
-                          Latency:{" "}
-                          {event.latencyMs == null
-                            ? "—"
-                            : `${event.latencyMs} ms`}
-                        </p>
-                        <p>
-                          Status:{" "}
-                          {event.status ?? (event.error ? "error" : "ok")}
-                        </p>
-                        <p>Chat: {event.chatId ?? "—"}</p>
-                      </div>
-                      {event.error && (
-                        <p className="mt-3 rounded-xl bg-destructive/10 p-3 text-destructive">
-                          {event.error}
-                        </p>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+              <>
+                <div className="max-h-[36rem] overflow-y-auto rounded-2xl border bg-background/45 px-3">
+                  <Accordion>
+                    {visibleEvents.map((event) => {
+                      const status =
+                        event.status ?? (event.error ? "error" : "ok")
+                      const statusOk = ["ok", "success", "completed"].includes(
+                        status.toLocaleLowerCase()
+                      )
+                      const latencyTone =
+                        event.latencyMs == null
+                          ? "bg-muted text-muted-foreground"
+                          : event.latencyMs < 1_000
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                            : event.latencyMs < 3_000
+                              ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                              : "bg-rose-500/15 text-rose-700 dark:text-rose-300"
+                      const metadata = [
+                        {
+                          label: "Chat",
+                          value:
+                            event.chatId == null
+                              ? "Not tied to a chat"
+                              : `${event.chatName ?? "Unknown chat"} · ${event.chatId}`,
+                          icon: IconMessageCircle,
+                        },
+                        {
+                          label: "User",
+                          value:
+                            event.firstName || event.username
+                              ? `${event.firstName ?? ""}${event.username ? ` · @${event.username}` : ""}`
+                              : String(event.userId),
+                          icon: IconUser,
+                        },
+                        {
+                          label: "Model",
+                          value: event.model ?? "Not applicable",
+                          icon: IconBrain,
+                        },
+                        {
+                          label: "Request",
+                          value: event.command
+                            ? `${event.action} · ${event.command}`
+                            : event.action,
+                          icon: IconCode,
+                        },
+                        {
+                          label: "Chat type",
+                          value: event.threadId
+                            ? `${event.chatType ?? "chat"} · topic ${event.threadId}`
+                            : (event.chatType ?? "Not recorded"),
+                          icon: IconHash,
+                        },
+                        {
+                          label: "Payload",
+                          value:
+                            event.inputLength == null &&
+                            event.outputLength == null
+                              ? "Not recorded"
+                              : `${formatTokens(event.inputLength)} in · ${formatTokens(event.outputLength)} out`,
+                          icon: IconBolt,
+                        },
+                      ]
+
+                      return (
+                        <AccordionItem key={`${event.kind}-${event.id}`}>
+                          <AccordionTrigger className="gap-2 py-3">
+                            <span className="min-w-0 flex-1 text-left">
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                <Badge
+                                  variant="outline"
+                                  className="capitalize"
+                                >
+                                  {event.kind}
+                                </Badge>
+                                <span className="truncate text-xs font-semibold capitalize sm:text-sm">
+                                  {event.action.replaceAll("_", " ")}
+                                </span>
+                                <Badge
+                                  variant="secondary"
+                                  className={
+                                    statusOk
+                                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                                      : "bg-destructive/12 text-destructive"
+                                  }
+                                >
+                                  {status}
+                                </Badge>
+                                {event.latencyMs != null && (
+                                  <Badge
+                                    variant="secondary"
+                                    className={latencyTone}
+                                  >
+                                    <IconClock />
+                                    {event.latencyMs} ms
+                                  </Badge>
+                                )}
+                              </span>
+                              <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-normal text-muted-foreground sm:text-xs">
+                                <span className="inline-flex items-center gap-1">
+                                  <IconCalendar className="size-3.5" />
+                                  {formatDate(event.ts)}
+                                </span>
+                                {event.chatId != null && (
+                                  <span className="inline-flex min-w-0 items-center gap-1">
+                                    <IconMessageCircle className="size-3.5" />
+                                    <span className="max-w-48 truncate">
+                                      {event.chatName ?? "Unknown chat"}
+                                    </span>
+                                    <span className="font-mono">
+                                      {event.chatId}
+                                    </span>
+                                  </span>
+                                )}
+                              </span>
+                            </span>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="space-y-3 pb-2">
+                              <dl className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+                                {metadata.map(
+                                  ({ label, value, icon: FieldIcon }) => (
+                                    <div
+                                      key={label}
+                                      className="rounded-xl border bg-card/70 p-3"
+                                    >
+                                      <dt className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                                        <FieldIcon className="size-3.5" />
+                                        {label}
+                                      </dt>
+                                      <dd className="mt-1.5 break-words text-xs">
+                                        {value}
+                                      </dd>
+                                    </div>
+                                  )
+                                )}
+                              </dl>
+
+                              {event.inputText != null && (
+                                <section className="overflow-hidden rounded-xl border">
+                                  <h3 className="border-b bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-700 dark:text-sky-300">
+                                    Full request
+                                  </h3>
+                                  <pre className="max-h-64 overflow-auto p-3 font-sans text-xs whitespace-pre-wrap">
+                                    {event.inputText || "Empty request body"}
+                                  </pre>
+                                </section>
+                              )}
+
+                              {event.outputText != null && (
+                                <section className="overflow-hidden rounded-xl border">
+                                  <h3 className="border-b bg-violet-500/10 px-3 py-2 text-xs font-semibold text-violet-700 dark:text-violet-300">
+                                    Full response
+                                  </h3>
+                                  <pre className="max-h-64 overflow-auto p-3 font-sans text-xs whitespace-pre-wrap">
+                                    {event.outputText || "Empty response body"}
+                                  </pre>
+                                </section>
+                              )}
+
+                              {event.toolCalls != null && (
+                                <AuditData
+                                  title="Tool calls"
+                                  value={event.toolCalls}
+                                />
+                              )}
+                              {event.details != null && (
+                                <AuditData
+                                  title="Additional details"
+                                  value={event.details}
+                                />
+                              )}
+                              {event.error && (
+                                <section className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-xs text-destructive">
+                                  <p className="mb-1 font-semibold">Error</p>
+                                  <p className="whitespace-pre-wrap">
+                                    {event.error}
+                                  </p>
+                                </section>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      )
+                    })}
+                  </Accordion>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    Page {page} of {pageCount} · {events.length} events
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page === 1}
+                      onClick={() =>
+                        setAuditPage((current) => Math.max(1, current - 1))
+                      }
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page === pageCount}
+                      onClick={() =>
+                        setAuditPage((current) =>
+                          Math.min(pageCount, current + 1)
+                        )
+                      }
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
       )}
     </>
+  )
+}
+
+function AuditData({ title, value }: { title: string; value: unknown }) {
+  const entries: Array<[string, unknown]> =
+    value != null && typeof value === "object"
+      ? Object.entries(value as Record<string, unknown>)
+      : [["value", value]]
+
+  return (
+    <section className="overflow-hidden rounded-xl border">
+      <h3 className="border-b bg-muted/70 px-3 py-2 text-xs font-semibold">
+        {title}
+      </h3>
+      <dl className="divide-y">
+        {entries.map(([key, item]) => (
+          <div
+            key={key}
+            className="grid gap-1 px-3 py-2.5 sm:grid-cols-[9rem_1fr]"
+          >
+            <dt className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+              {key.replaceAll("_", " ")}
+            </dt>
+            <dd className="min-w-0 text-xs">
+              <AuditValue value={item} />
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  )
+}
+
+function AuditValue({ value }: { value: unknown }) {
+  if (value == null || typeof value !== "object") {
+    return (
+      <span className="inline-flex rounded-md bg-muted/70 px-2 py-1 break-words">
+        {String(value ?? "—")}
+      </span>
+    )
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+  if (entries.length === 0) {
+    return <span className="text-muted-foreground">Empty</span>
+  }
+
+  return (
+    <dl className="space-y-1.5">
+      {entries.map(([key, item]) => (
+        <div key={key} className="rounded-lg bg-muted/55 p-2">
+          <dt className="mb-1 text-[9px] font-semibold tracking-wide text-muted-foreground uppercase">
+            {Array.isArray(value)
+              ? `Item ${Number(key) + 1}`
+              : key.replaceAll("_", " ")}
+          </dt>
+          <dd>
+            <AuditValue value={item} />
+          </dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 
@@ -1971,7 +2328,13 @@ function AgentDialog({
               }
             >
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {draft.modelId
+                    ? (data?.models.find(
+                        (model) => model.id === draft.modelId
+                      )?.name ?? "Selected model")
+                    : "Current chat model"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__current__">Current chat model</SelectItem>

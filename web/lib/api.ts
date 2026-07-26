@@ -80,6 +80,7 @@ export interface Memory {
   content: string
   createdAt: string
   chatId: number
+  chatName: string
   category: "preference" | "fact" | "task" | "project"
   updatedAt?: string
   expiresAt?: string | null
@@ -112,7 +113,15 @@ export interface AuditEvent {
   id: number
   userId: number
   chatId: number | null
+  chatName: string | null
+  chatType: string | null
+  threadId: number | null
+  username: string | null
+  firstName: string | null
   action: string
+  command: string | null
+  inputLength: number | null
+  outputLength: number | null
   model: string | null
   status: string | null
   latencyMs: number | null
