@@ -6,6 +6,8 @@ allowBuilds:
   esbuild: true
   ffmpeg-static: true
   protobufjs: false
+  sharp: false
+  unrs-resolver: false
 minimumReleaseAgeExclude:
   - "@vitest/expect@3.2.6"
   - "@vitest/mocker@3.2.6"
