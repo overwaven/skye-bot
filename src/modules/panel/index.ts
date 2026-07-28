@@ -29,7 +29,7 @@ function setSecurityHeaders(_req: Request, res: Response, next: NextFunction): v
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self' https://telegram.org",
+      "script-src 'self' 'unsafe-inline' https://telegram.org",
       "style-src 'self' 'unsafe-inline'",
       "font-src 'self'",
       "img-src 'self' data: blob: https://assets.composio.dev",
@@ -138,7 +138,10 @@ export const panelModule: SkyeModule = {
         express.static(publicDir, {
           etag: true,
           setHeaders: (res, path) => {
-            if (path.includes(`${join("assets", "")}`)) {
+            if (
+              path.includes(`${join("assets", "")}`) ||
+              path.includes(`${join("_next", "static", "")}`)
+            ) {
               res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
             }
           },

@@ -327,7 +327,8 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       },
       required: ["prompt"],
     },
-    execute: async (args, tenant) => {
+    timeoutMs: 180_000,
+    execute: async (args, tenant, signal) => {
       const prompt = String(args.prompt ?? "");
       if (!prompt) return "No prompt provided for image generation.";
 
@@ -337,7 +338,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       const referenceCount = references.length;
 
       try {
-        const buffer = await deps.llm.generateImage(prompt, referenceUrls);
+        const buffer = await deps.llm.generateImage(prompt, referenceUrls, signal);
         if (!buffer) {
           storeConversation(
             tenant,
@@ -756,7 +757,11 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
 
         try {
           await ctx.replyWithChatAction("upload_photo");
-          const buffer = await deps.llm.generateImage(prompt);
+          const buffer = await deps.llm.generateImage(
+            prompt,
+            undefined,
+            AbortSignal.timeout(180_000)
+          );
 
           if (!buffer) {
             await ctx.reply("No image was generated. Try a different prompt.", {
@@ -1771,7 +1776,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         const photoUrl = `https://api.telegram.org/file/bot${deps.botToken}/${file.file_path}`;
         photoUrls = [await toDataUrl(photoUrl, 60_000, deps.maxAttachmentBytes)];
       }
-      const buffer = await deps.llm.generateImage(prompt, photoUrls);
+      const buffer = await deps.llm.generateImage(prompt, photoUrls, AbortSignal.timeout(180_000));
 
       if (!buffer) {
         await ctx.reply("No image was generated. Try a different prompt.", {
@@ -2148,7 +2153,8 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         }
         const buffer = await deps.llm.generateImage(
           nextPrompt,
-          sourceImageUrl ? [sourceImageUrl] : undefined
+          sourceImageUrl ? [sourceImageUrl] : undefined,
+          signal
         );
         signal.throwIfAborted();
         if (!buffer) {

@@ -1,5 +1,6 @@
 import type { ModuleContext, PanelRoute } from "../../core/module.js";
 import type { PanelRequest } from "../panel/index.js";
+import { resolveChatNames } from "../panel/chatNames.js";
 import { getDb } from "../../core/db.js";
 import { MEMORY_CATEGORIES, memoryService, type MemoryCategory } from "./service.js";
 
@@ -16,12 +17,11 @@ function validCategory(value: unknown): value is MemoryCategory {
 }
 
 export function buildRoutes(ctx: ModuleContext): PanelRoute[] {
-  void ctx;
   return [
     {
       method: "get",
       path: "/memories",
-      handler: (req, res) => {
+      handler: async (req, res) => {
         const userId = (req as PanelRequest).tenant.userId!;
         const rows = getDb()
           .prepare<
@@ -33,7 +33,20 @@ export function buildRoutes(ctx: ModuleContext): PanelRoute[] {
         memories.sort((a, b) =>
           (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt)
         );
-        res.json(memories.slice(0, 100));
+        const visible = memories.slice(0, 100);
+        const chatNames = await resolveChatNames(
+          ctx,
+          visible.flatMap((memory) => (memory.chatId == null ? [] : [memory.chatId]))
+        );
+        res.json(
+          visible.map((memory) => ({
+            ...memory,
+            chatName:
+              memory.chatId == null
+                ? "Unknown chat"
+                : (chatNames.get(memory.chatId) ?? `Chat ${memory.chatId}`),
+          }))
+        );
       },
     },
     {
