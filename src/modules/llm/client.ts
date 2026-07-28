@@ -603,7 +603,11 @@ export class LlmClient {
    * main chat creds. Always uses IMAGE_MODEL. Image generation is a
    * server-level capability, not metered per user model tier.
    */
-  async generateImage(prompt: string, imageUrls?: string[]): Promise<Buffer | null> {
+  async generateImage(
+    prompt: string,
+    imageUrls?: string[],
+    signal?: AbortSignal
+  ): Promise<Buffer | null> {
     const apiKey = this.settings.imageApiKey || this.settings.apiKey;
     const baseUrl = this.settings.imageBaseUrl || this.settings.baseUrl;
 
@@ -625,6 +629,7 @@ export class LlmClient {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
+      signal,
     });
 
     if (!res.ok) {
