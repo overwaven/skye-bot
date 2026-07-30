@@ -75,3 +75,14 @@ Credential precedence for LLM calls: per-user key → per-chat key → global `o
 - Panel auth: `src/modules/panel/auth.ts`.
 - Connector config and service: `src/modules/connectors/config.ts` + `src/modules/connectors/service.ts`.
 - User-facing docs: `docs/`.
+
+## Cursor Cloud specific instructions
+
+Dependencies are refreshed automatically on startup via the update script (`pnpm install`), which also builds the native modules (`better-sqlite3`, `esbuild`, `ffmpeg-static`). Standard commands (`dev`, `build`, `lint`, `typecheck`, `test`, `validate-config`) are documented above and in `package.json`.
+
+- Booting requires a real `config.yaml` (gitignored; copy from `config.example.yaml`). Set a valid `bot_token` and, for AI replies, `openai_key`. Provide these as Cloud Agent secrets rather than committing them.
+- The bot process (`pnpm dev` / `pnpm start`) hard-exits at `bot.init()` with `GrammyError: getMe 401` if `bot_token` is a placeholder. Everything before that gate (config load, all migrations, `data/skye.db` creation, background job worker, reminder scheduler, and the in-process panel HTTP server on `:3001`) runs fine, so a `getMe 401` means the environment is healthy and only credentials are missing.
+- The LLM preflight (`llm.checkCapabilities()`) is advisory and non-fatal, so the bot boots even without a working `openai_key`; only actual chat replies need it.
+- Two ways to view the settings panel: the built static UI is served by the bot's own Express server on `:3001` (needs the bot running), while `pnpm --filter skye-panel dev` runs Next.js on `:3000`. The Next dev server only renders shell/error states on its own because it fetches the bot's `/api` (which validates Telegram Mini App `initData` against `bot_token`); for a working panel, run the bot and open `panel.webapp_url` (`:3001`).
+- Gotcha: running `next dev` or `next build` in `web/` rewrites `web/tsconfig.json` (adds `dist/types` includes and reformats). Revert with `git checkout -- web/tsconfig.json` before committing.
+- Outbound network to `api.telegram.org` and `openrouter.ai` is available in this environment.
