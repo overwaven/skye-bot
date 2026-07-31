@@ -62,7 +62,7 @@ import {
   toFileDataUrl,
   type ToolCallRecord,
 } from "./helpers.js";
-import { cleanMd, unwrapTextEnvelope } from "../../utils/markdown.js";
+import { cleanMd, unwrapStreamingTextEnvelope, unwrapTextEnvelope } from "../../utils/markdown.js";
 import { log } from "../../utils/log.js";
 import { QueueTimeoutError, type TelegramReliabilityService } from "./reliability.js";
 
@@ -1324,10 +1324,11 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       const now = Date.now();
       if (now - lastDraftTs < 300) return;
       lastDraftTs = now;
+      const visibleSnapshot = unwrapStreamingTextEnvelope(snapshot);
       if (toolCallHistory.length > 0) {
-        void draft.send(buildDraftMarkdown(toolCallHistory, snapshot));
+        void draft.send(buildDraftMarkdown(toolCallHistory, visibleSnapshot));
       } else {
-        void draft.send(snapshot);
+        void draft.send(visibleSnapshot);
       }
     };
     const onToolCalls = (calls: ToolCallRecord[]) => {

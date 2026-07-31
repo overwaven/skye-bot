@@ -1,5 +1,5 @@
 import { test, expect, describe } from "vitest";
-import { cleanMd, unwrapTextEnvelope } from "../markdown.js";
+import { cleanMd, unwrapStreamingTextEnvelope, unwrapTextEnvelope } from "../markdown.js";
 
 describe("cleanMd", () => {
   test("keeps rich markdown emphasis", () => {
@@ -49,5 +49,38 @@ describe("unwrapTextEnvelope", () => {
   test("preserves other JSON objects", () => {
     const json = '{"text":"Hello","language":"en"}';
     expect(unwrapTextEnvelope(json)).toBe(json);
+  });
+
+  test("removes a leaked thought object before the final answer", () => {
+    expect(unwrapTextEnvelope('{"thought":"Internal reasoning"} Мяу.')).toBe("Мяу.");
+  });
+
+  test("removes leaked thought and tools metadata before the final answer", () => {
+    expect(
+      unwrapTextEnvelope('{"thought":"Use {care} and \\"warmth\\"","tools":[]}\nБуду осторожна.')
+    ).toBe("Буду осторожна.");
+  });
+
+  test("preserves JSON requested as the actual response", () => {
+    const json = '{"thought":"A visible field","tools":[]}';
+    expect(unwrapTextEnvelope(json)).toBe(json);
+    expect(unwrapTextEnvelope('{"status":"ok"} Done')).toBe('{"status":"ok"} Done');
+  });
+});
+
+describe("unwrapStreamingTextEnvelope", () => {
+  test("hides partial and complete internal metadata while it is streaming", () => {
+    expect(unwrapStreamingTextEnvelope('{"tho')).toBe("");
+    expect(unwrapStreamingTextEnvelope('{"thought":"Internal","tools":[]}')).toBe("");
+  });
+
+  test("reveals the answer after the internal metadata is complete", () => {
+    expect(unwrapStreamingTextEnvelope('{"thought":"Internal","tools":[]}Буду осторожна.')).toBe(
+      "Буду осторожна."
+    );
+  });
+
+  test("preserves ordinary streamed text", () => {
+    expect(unwrapStreamingTextEnvelope("A normal answer")).toBe("A normal answer");
   });
 });

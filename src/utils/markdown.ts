@@ -5,6 +5,66 @@ export function cleanMd(text: string) {
   return text.replace(/\\([.!(){}[\]])/g, "$1").trim();
 }
 
+const INTERNAL_METADATA_KEYS = new Set(["thought", "tools"]);
+
+function leadingJsonObjectEnd(text: string): number | undefined {
+  if (text[0] !== "{") return undefined;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === "{") depth++;
+    else if (char === "}" && --depth === 0) return i + 1;
+  }
+  return undefined;
+}
+
+function startsWithInternalMetadata(text: string): boolean {
+  if (text[0] !== "{") return false;
+  const afterBrace = text.slice(1).trimStart();
+  if (!afterBrace) return true;
+  if (!afterBrace.startsWith('"')) return false;
+  const closingQuote = afterBrace.indexOf('"', 1);
+  const key = afterBrace.slice(1, closingQuote === -1 ? undefined : closingQuote);
+  return closingQuote === -1
+    ? [...INTERNAL_METADATA_KEYS].some((candidate) => candidate.startsWith(key))
+    : INTERNAL_METADATA_KEYS.has(key);
+}
+
+function stripInternalMetadataPrefix(text: string): string {
+  const trimmed = text.trimStart();
+  const objectEnd = leadingJsonObjectEnd(trimmed);
+  if (objectEnd == null) return text;
+
+  let metadata: unknown;
+  try {
+    metadata = JSON.parse(trimmed.slice(0, objectEnd));
+  } catch {
+    return text;
+  }
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) return text;
+
+  const keys = Object.keys(metadata);
+  const remainder = trimmed.slice(objectEnd).trimStart();
+  if (
+    !remainder ||
+    typeof (metadata as { thought?: unknown }).thought !== "string" ||
+    keys.some((key) => !INTERNAL_METADATA_KEYS.has(key))
+  ) {
+    return text;
+  }
+  return remainder;
+}
+
 export function unwrapTextEnvelope(text: string): string {
   const trimmed = text.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] ?? trimmed;
@@ -21,8 +81,23 @@ export function unwrapTextEnvelope(text: string): string {
       return (value as { text: string }).text;
     }
   } catch {
-    return text;
+    return stripInternalMetadataPrefix(text);
   }
 
+  return stripInternalMetadataPrefix(text);
+}
+
+export function unwrapStreamingTextEnvelope(text: string): string {
+  const trimmed = text.trimStart();
+  if (startsWithInternalMetadata(trimmed) && leadingJsonObjectEnd(trimmed) == null) return "";
+
+  const unwrapped = stripInternalMetadataPrefix(text);
+  if (unwrapped !== text) return unwrapped;
+  if (
+    startsWithInternalMetadata(trimmed) &&
+    trimmed.slice(leadingJsonObjectEnd(trimmed)).trim() === ""
+  ) {
+    return "";
+  }
   return text;
 }
