@@ -7,6 +7,7 @@ import type { ChatConfigService } from "../chatConfig/service.js";
 import type { SandboxService } from "../sandbox/service.js";
 import type { RemindersService } from "../reminders/service.js";
 import type { ChannelService } from "../channel/service.js";
+import type { StickersService } from "../stickers/service.js";
 import type { LlmClient } from "../llm/client.js";
 import type { TenantContext } from "../../core/tenant.js";
 import type { ToolDefinition } from "../../core/module.js";
@@ -23,6 +24,7 @@ export interface AgentRuntimeDeps {
   sandbox?: SandboxService;
   reminders?: RemindersService;
   channel?: ChannelService;
+  stickers?: StickersService;
   userAgents: UserAgentService;
 }
 

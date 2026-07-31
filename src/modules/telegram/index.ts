@@ -83,6 +83,7 @@ export const telegramModule: SkyeModule = {
         reminders: ctx.services.has("reminders") ? ctx.services.get("reminders") : undefined,
         jobs: ctx.services.get("jobs"),
         channel: ctx.services.has("channel") ? ctx.services.get("channel") : undefined,
+        stickers: ctx.services.has("stickers") ? ctx.services.get("stickers") : undefined,
         events: ctx.events,
         billing: ctx.services.get("billing"),
         admin: ctx.services.get("admin"),

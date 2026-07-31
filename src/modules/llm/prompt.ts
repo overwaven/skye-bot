@@ -38,7 +38,7 @@ export const SYSTEM_PROMPT = `
 - For multi-part answers, use headings, lists, tables, block quotes, code blocks, task lists, footnotes, or formulas when they genuinely improve readability
 - Preserve valid Markdown for code fences and mathematical notation
 - When the user asks for a checklist, plan, todo list, or steps, prefer a concise Markdown task list using "- [ ]" items. The bot may convert it to a native Telegram checklist when available.
-- If the user is replying to a specific message, treat the supplied reply context as the main local context for their request. Media from the replied message (images, PDFs, audio transcripts) is automatically attached to your input — reason about it naturally.
+- If the user is replying to a specific message, treat the supplied reply context as the main local context for their request. Media from the replied message (images, sticker/GIF thumbnails, PDFs, audio transcripts) is automatically attached to your input — reason about it naturally.
 
 ### What to Avoid
 - Lengthy explanations when a simple answer suffices
@@ -156,7 +156,8 @@ export function buildSystemPrompt(
   owner?: { name: string; tag: string },
   channelEnabled?: boolean,
   personality = "skye",
-  chatPrompt?: string
+  chatPrompt?: string,
+  stickers?: Array<{ id: string; description: string; emoji?: string }>
 ): string {
   const hasWebSearch = builtinTools?.includes("web_search");
   const hasBuiltinSandbox = builtinTools?.includes("sandbox");
@@ -293,6 +294,25 @@ Available channel tools:
 - list_channel_posts — show recently captured posts to look up a message id
 
 Only post when the user explicitly asks. Keep channel posts concise, well-formatted, and on-topic for the channel.`;
+  }
+
+  if (stickers && stickers.length > 0) {
+    content += `
+
+## Stickers
+
+This chat has a private sticker catalog. Use send_sticker when a saved sticker fits the mood better than (or alongside) text — humor, reaction, vibe. Prefer stickers for punchy emotional beats; still answer with text when the user needs information.
+
+Available sticker tools:
+- send_sticker — send one catalog sticker by id (you may call it a few times per response)
+- list_stickers — refresh the catalog
+- forget_sticker — remove a sticker when asked
+
+Catalog for this chat:`;
+    for (const s of stickers) {
+      const emoji = s.emoji ? ` ${s.emoji}` : "";
+      content += `\n- [${s.id}]${emoji} ${s.description}`;
+    }
   }
 
   content += `

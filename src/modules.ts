@@ -18,6 +18,7 @@ import { proactiveModule } from "./modules/proactive/index.js";
 import { remindersModule } from "./modules/reminders/index.js";
 import { sandboxModule } from "./modules/sandbox/index.js";
 import { speechModule } from "./modules/speech/index.js";
+import { stickersModule } from "./modules/stickers/index.js";
 import { telegramModule } from "./modules/telegram/index.js";
 import { userConfigModule } from "./modules/userConfig/index.js";
 
@@ -48,6 +49,7 @@ export const modules: readonly SkyeModule[] = [
   sandboxModule,
   proactiveModule,
   remindersModule,
+  stickersModule,
   channelModule,
   agentRuntimeModule,
   panelModule,

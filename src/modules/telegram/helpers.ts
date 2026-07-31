@@ -331,7 +331,9 @@ const DRAFT_STATUS_EMOJI: Record<DraftStatusKind, { id: string; fallback: string
 export const DEFAULT_DRAFT_STATUS: DraftStatus = { kind: "thinking", text: "Thinking…" };
 
 export function draftStatusForMessageType(type: string): DraftStatus {
-  if (type === "photo") return { kind: "images", text: "Looking at images…" };
+  if (type === "photo" || type === "sticker" || type === "animation") {
+    return { kind: "images", text: "Looking at images…" };
+  }
   if (type === "voice" || type === "audio" || type === "video_note") {
     return { kind: "voice", text: "Listening to audio…" };
   }
@@ -343,6 +345,9 @@ export function draftStatusForToolCalls(calls: ToolCallRecord[]): DraftStatus {
   const names = calls.map((call) => call.name.toLowerCase());
   if (names.some((name) => name.includes("image"))) {
     return { kind: "images", text: "Creating an image…" };
+  }
+  if (names.some((name) => name.includes("sticker"))) {
+    return { kind: "thinking", text: "Picking a sticker…" };
   }
   if (names.some((name) => name.includes("voice") || name.includes("speech"))) {
     return { kind: "voice", text: "Recording a voice response…" };
