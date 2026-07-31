@@ -446,6 +446,7 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
       const configuredPrompt = profile
         ? `${profile.instructions}${threadPrompt ? `\n\nAdditional instructions for this chat or topic:\n${threadPrompt}` : ""}`
         : threadPrompt;
+      const chatStickers = this.deps.stickers?.list(request.tenant.chatId) ?? [];
       return buildSystemPrompt(
         memories,
         chatContext,
@@ -459,7 +460,12 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
         request.owner,
         !!this.deps.channel,
         userCfg?.personality,
-        configuredPrompt
+        configuredPrompt,
+        chatStickers.map((s) => ({
+          id: s.id,
+          description: s.description,
+          ...(s.emoji ? { emoji: s.emoji } : {}),
+        }))
       );
     };
     let streamedText = "";

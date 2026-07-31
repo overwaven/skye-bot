@@ -218,6 +218,28 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("reaction");
   });
 
+  test("includes sticker catalog when provided", () => {
+    const prompt = buildSystemPrompt(
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      [{ id: "497d3308-6072-4aaf-8900-1776f7de987f", description: "ебейший ухмыляющийся хомяк" }]
+    );
+    expect(prompt).toContain("## Stickers");
+    expect(prompt).toContain("send_sticker");
+    expect(prompt).toContain("ебейший ухмыляющийся хомяк");
+  });
+
   test("requires tool work to finish before returning the final answer", () => {
     const prompt = buildSystemPrompt([]);
     expect(prompt).toContain("## Task Completion");

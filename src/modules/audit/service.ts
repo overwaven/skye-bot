@@ -9,7 +9,9 @@ export type MsgType =
   | "image_edit"
   | "document"
   | "audio"
-  | "video_note";
+  | "video_note"
+  | "sticker"
+  | "animation";
 
 export interface AuditEntry {
   chatId: number;

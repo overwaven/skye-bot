@@ -12,6 +12,8 @@ export interface DeletionSummary {
   conversationItems: number;
   groupMessages: number;
   chatConfigs: number;
+  chatStickers: number;
+  chatStickerTeach: number;
   reminders: number;
   requestLogs: number;
   adminPrincipals: number;
@@ -52,6 +54,8 @@ export function deleteUserData(userId: number): DeletionSummary {
       conversationItems: changes("DELETE FROM conversation_items WHERE chat_id = ?"),
       groupMessages: changes("DELETE FROM group_messages WHERE chat_id = ?"),
       chatConfigs: changes("DELETE FROM chat_configs WHERE chat_id = ?"),
+      chatStickers: changes("DELETE FROM chat_stickers WHERE chat_id = ?"),
+      chatStickerTeach: changes("DELETE FROM chat_sticker_teach WHERE chat_id = ?"),
       reminders: changes("DELETE FROM reminders WHERE user_id = ?"),
       requestLogs: changes("DELETE FROM request_logs WHERE user_id = ?"),
       adminPrincipals: changes("DELETE FROM admin_principals WHERE user_id = ? AND role = 'admin'"),

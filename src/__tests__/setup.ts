@@ -14,6 +14,7 @@ import { legalModule } from "../modules/legal/index.js";
 import { jobsModule } from "../modules/jobs/index.js";
 import { memoryModule } from "../modules/memory/index.js";
 import { remindersModule } from "../modules/reminders/index.js";
+import { stickersModule } from "../modules/stickers/index.js";
 import { userConfigModule } from "../modules/userConfig/index.js";
 
 runMigrations(getDb(":memory:"), [
@@ -24,6 +25,7 @@ runMigrations(getDb(":memory:"), [
   userConfigModule,
   jobsModule,
   remindersModule,
+  stickersModule,
   adminModule,
   billingModule,
   legalModule,

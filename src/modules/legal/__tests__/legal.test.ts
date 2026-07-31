@@ -54,6 +54,16 @@ function seed(userId: number): void {
     userId
   );
   db.prepare(
+    `INSERT INTO chat_stickers
+      (chat_id, id, file_id, file_unique_id, description, emoji, set_name, thumb_file_id,
+       is_animated, is_video, created_at, updated_at)
+     VALUES (?, 'st1', 'fid', 'fuid', 'test sticker', NULL, NULL, NULL, 0, 0, ?, ?)`
+  ).run(userId, now, now);
+  db.prepare(
+    `INSERT INTO chat_sticker_teach (chat_id, enabled, seed_index, pending_desc, pending_payload, updated_at)
+     VALUES (?, 1, 0, NULL, NULL, ?)`
+  ).run(userId, now);
+  db.prepare(
     "INSERT INTO reminders (id, chat_id, thread_id, user_id, prompt, fire_at, repeat, created_at, active) VALUES (?, ?, NULL, ?, 'x', ?, 'none', ?, 1)"
   ).run("rem_1", userId, userId, now, now);
   db.prepare(
@@ -81,6 +91,8 @@ function counts(userId: number): Record<string, number> {
     "conversation_items",
     "group_messages",
     "chat_configs",
+    "chat_stickers",
+    "chat_sticker_teach",
   ];
   const out: Record<string, number> = {};
   for (const t of byUser) {
@@ -119,6 +131,8 @@ beforeEach(() => {
     DELETE FROM conversation_items;
     DELETE FROM group_messages;
     DELETE FROM chat_configs;
+    DELETE FROM chat_stickers;
+    DELETE FROM chat_sticker_teach;
     DELETE FROM reminders;
     DELETE FROM request_logs;
   `);
@@ -141,6 +155,8 @@ describe("deleteUserData", () => {
     expect(summary.conversationItems).toBe(1);
     expect(summary.groupMessages).toBe(1);
     expect(summary.chatConfigs).toBe(1);
+    expect(summary.chatStickers).toBe(1);
+    expect(summary.chatStickerTeach).toBe(1);
     expect(summary.reminders).toBe(1);
     expect(summary.requestLogs).toBe(1);
     expect(summary.adminPrincipals).toBe(0);

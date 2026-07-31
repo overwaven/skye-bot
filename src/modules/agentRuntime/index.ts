@@ -92,6 +92,7 @@ export const agentRuntimeModule: SkyeModule = {
         sandbox: ctx.services.has("sandbox") ? ctx.services.get("sandbox") : undefined,
         reminders: ctx.services.has("reminders") ? ctx.services.get("reminders") : undefined,
         channel: ctx.services.has("channel") ? ctx.services.get("channel") : undefined,
+        stickers: ctx.services.has("stickers") ? ctx.services.get("stickers") : undefined,
         userAgents,
       },
       ctx.config.agent_runtime

@@ -24,6 +24,16 @@ import { REMINDER_DELIVERY_JOB, type ReminderDeliveryPayload } from "../reminder
 import { applyReminderControl, parseReminderDuration } from "../reminders/controls.js";
 import { formatReminderTime, reminderListMarkdown } from "../reminders/presentation.js";
 import type { ChannelService } from "../channel/service.js";
+import type { StickersService } from "../stickers/service.js";
+import {
+  createSendStickerTool,
+  type PreparedStickerMessage,
+} from "../stickers/tools.js";
+import {
+  downloadVisionDataUrl,
+  resolveVisualMedia,
+  visualSourceFromMessage,
+} from "../stickers/media.js";
 import type { EventBus } from "../../core/events.js";
 import type { Contributions, TelegramCommand, ToolDefinition } from "../../core/module.js";
 import { tenantFromGrammy, threadKey, type TenantContext } from "../../core/tenant.js";
@@ -70,6 +80,7 @@ export interface TelegramDeps {
   reminders?: RemindersService;
   jobs: BackgroundJobsService;
   channel?: ChannelService;
+  stickers?: StickersService;
   events?: EventBus;
   billing: BillingService;
   admin: AdminService;
@@ -191,6 +202,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
    * Collect media content parts (images, PDFs, audio transcripts) from the
    * replied-to message so the model can reason about them. This handles:
    * - Photos → input_image parts (if vision supported)
+   * - Stickers / GIF animations → thumbnail or static WEBP (if vision supported)
    * - PDF documents → input_file parts (if file parsing supported)
    * - Audio/voice → transcribed text (if STT available)
    * - Text documents → extracted text
@@ -222,6 +234,35 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         summaryParts.push(`[replied photo: ${cap}]`);
       } catch (e) {
         log.warn({ err: e }, "Failed to download replied photo");
+      }
+    }
+
+    // Sticker or GIF animation in replied message
+    if (supportsImages) {
+      const visual = visualSourceFromMessage(reply as Message);
+      if (visual) {
+        const resolved = resolveVisualMedia(visual);
+        if (resolved) {
+          try {
+            const dataUrl = await downloadVisionDataUrl(
+              deps.botToken,
+              resolved.visionFileId,
+              (fileId) => ctx.api.getFile(fileId),
+              deps.maxAttachmentBytes
+            );
+            parts.push({ type: "input_image", image_url: dataUrl });
+            summaryParts.push(`[replied ${resolved.summary}]`);
+          } catch (e) {
+            log.warn({ err: e }, "Failed to download replied sticker/GIF thumbnail");
+            summaryParts.push(`[replied ${resolved.summary} — thumbnail unavailable]`);
+          }
+        } else {
+          summaryParts.push(
+            visual.kind === "sticker"
+              ? `[replied sticker: ${visual.sticker.emoji ?? "sticker"}]`
+              : "[replied GIF]"
+          );
+        }
       }
     }
 
@@ -698,7 +739,11 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           "",
           "## Documents, PDFs & audio",
           "",
-          "Send `.txt`, `.md`, `.json`, `.csv`, code, or logs and I'll read them. Send a PDF and I'll parse it — text, images, tables, everything. Reply to anyone's PDF, photo, or audio message and ask me about it — I'll see the content and reason about it. Audio files and video notes are transcribed too.",
+          "Send `.txt`, `.md`, `.json`, `.csv`, code, or logs and I'll read them. Send a PDF and I'll parse it — text, images, tables, everything. Reply to anyone's PDF, photo, sticker, GIF, or audio message and ask me about it — I'll see the content and reason about it. Audio files and video notes are transcribed too.",
+          "",
+          "## Stickers",
+          "",
+          "Send a sticker or GIF while mentioning me (or reply to one) and I can see its thumbnail. Teach me this chat's sticker pack with `/stickers_teach` or `/stickers_seed`, list with `/stickers`, and I’ll fire them back when the vibe fits.",
           "",
           "## Sandbox & web",
           "",
@@ -718,7 +763,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           "",
           "---",
           "",
-          "Commands: /reset · /image · /voice · /memories · /forget · /status · /tools · /catchup · /reminders · /config",
+          "Commands: /reset · /image · /voice · /memories · /forget · /stickers · /stickers_teach · /stickers_seed · /status · /tools · /catchup · /reminders · /config",
           "",
           "Project: /source · /terms · /privacy · /paysupport · /developer_info · /delete_my_data",
         ].join("\n");
@@ -1227,7 +1272,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     tenant: ReturnType<typeof tenantFromGrammy>,
     userItem: ResponseInputItem,
     inputText: string,
-    msgType: "text" | "voice" | "photo" | "document" | "audio" | "video_note",
+    msgType: "text" | "voice" | "photo" | "document" | "audio" | "video_note" | "sticker" | "animation",
     options: { signal?: AbortSignal } = {}
   ) => {
     const t0 = Date.now();
@@ -1241,6 +1286,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     const toolCallHistory: ToolCallRecord[] = [];
     const voiceReplyMode = deps.chatConfig.get(tenant.chatId).voiceReplyMode;
     const preparedVoiceMessages: PreparedVoiceMessage[] = [];
+    const preparedStickers: PreparedStickerMessage[] = [];
     const requestTools = [...baseBuiltinTools];
     const allowVoiceTool = voiceReplyMode !== "text" || VOICE_OUTPUT_REQUEST_RE.test(inputText);
     if (deps.speech.isTtsAvailable() && allowVoiceTool) {
@@ -1258,6 +1304,19 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         })
       );
     }
+    if (deps.stickers && deps.stickers.count(tenant.chatId) > 0) {
+      requestTools.push(
+        createSendStickerTool({
+          stickers: deps.stickers,
+          onPrepared: (message) => {
+            preparedStickers.push(message);
+          },
+        })
+      );
+    }
+
+    const hasPreparedMedia = () =>
+      preparedVoiceMessages.length > 0 || preparedStickers.length > 0;
 
     let lastDraftTs = 0;
     const onChunk = (snapshot: string) => {
@@ -1384,7 +1443,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           owner: deps.owner,
           onChunk,
           onToolCalls,
-          acceptEmptyFinal: () => preparedVoiceMessages.length > 0,
+          acceptEmptyFinal: () => hasPreparedMedia(),
           signal: controller.signal,
         });
 
@@ -1400,8 +1459,8 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
             runAttempt(attemptModelId, requestTools)
           );
           rawText = attemptText;
-          if (rawText || preparedVoiceMessages.length > 0) usedModelId = attemptModelId;
-          if (rawText || preparedVoiceMessages.length > 0) break;
+          if (rawText || hasPreparedMedia()) usedModelId = attemptModelId;
+          if (rawText || hasPreparedMedia()) break;
           throw new Error("Model returned an empty response");
         } catch (e) {
           lastAttemptError = e;
@@ -1418,7 +1477,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         }
       }
 
-      if (!rawText && preparedVoiceMessages.length === 0) {
+      if (!rawText && !hasPreparedMedia()) {
         const recoveryModelId = fallbackIds[0] ?? modelId;
         void draft.send("", { ...DEFAULT_DRAFT_STATUS, text: "Trying without tools…" });
         try {
@@ -1431,12 +1490,12 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           lastAttemptError = e;
         }
       }
-      if (!rawText && preparedVoiceMessages.length === 0 && lastAttemptError) {
+      if (!rawText && !hasPreparedMedia() && lastAttemptError) {
         throw lastAttemptError;
       }
       const text = cleanMd(unwrapTextEnvelope(rawText));
 
-      if (!text && preparedVoiceMessages.length === 0) {
+      if (!text && !hasPreparedMedia()) {
         await draft.delete();
         await ctx.reply("I couldn't generate a response. Please try again.", {
           reply_to_message_id: ctx.message?.message_id,
@@ -1456,6 +1515,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       const shouldVoice = voiceReplyMode === "always" && deps.speech.isTtsAvailable();
       if (
         preparedVoiceMessages.length === 0 &&
+        preparedStickers.length === 0 &&
         text &&
         shouldVoice &&
         deps.speech.isTtsAvailable()
@@ -1500,26 +1560,44 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           duration: Math.max(1, Math.ceil(message.durationSeconds)),
         });
       }
+      for (const prepared of preparedStickers) {
+        try {
+          await ctx.replyWithChatAction("choose_sticker");
+          await ctx.replyWithSticker(prepared.sticker.fileId, {
+            reply_to_message_id: ctx.message?.message_id,
+          });
+        } catch (e) {
+          log.warn(
+            { err: e, stickerId: prepared.sticker.id, chatId: tenant.chatId },
+            "Failed to send prepared sticker"
+          );
+        }
+      }
       reactSafely(ctx, "👍");
       const spokenText = preparedVoiceMessages.map((message) => message.transcript).join("\n");
-      if (!text && spokenText) {
+      const stickerText = preparedStickers
+        .map((p) => `[sticker ${p.sticker.id}] ${p.sticker.description}`)
+        .join("\n");
+      if (!text && (spokenText || stickerText)) {
         storeConversation(
           tenant,
           "assistant",
-          { type: "voice", transcript: spokenText },
           spokenText
+            ? { type: "voice", transcript: spokenText }
+            : { type: "stickers", items: preparedStickers.map((p) => p.sticker.id) },
+          [spokenText, stickerText].filter(Boolean).join("\n")
         );
       }
       deps.audit.log({
         ...ctxAudit(ctx),
         msgType,
         inputLen: inputText.length,
-        outputLen: text.length + spokenText.length,
+        outputLen: text.length + spokenText.length + stickerText.length,
         latencyMs: Date.now() - t0,
         status: "ok",
         model: deps.llm.resolveModel(usedModelId).model,
         inputText,
-        outputText: [finalText, spokenText].filter(Boolean).join("\n\n"),
+        outputText: [finalText, spokenText, stickerText].filter(Boolean).join("\n\n"),
         toolCalls: toolCallHistory,
       });
     } catch (e) {
@@ -1564,6 +1642,19 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
 
   // --- Text handler ---
   bot.on("message:text", async (ctx) => {
+    const tenantEarly = tenantFromGrammy(ctx);
+    if (
+      deps.stickers?.getTeachState(tenantEarly.chatId).pendingPayload &&
+      (isDirectedAtBot(ctx) || ctx.chat?.type === "private")
+    ) {
+      const handled = await handleTeachDescriptionText(
+        ctx,
+        tenantEarly,
+        ctx.message.text || ""
+      );
+      if (handled) return;
+    }
+
     if (!isDirectedAtBot(ctx)) return;
 
     const tenant = tenantFromGrammy(ctx);
@@ -1854,6 +1945,232 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       clearInterval(actionInterval);
     }
   }
+
+  async function handleTeachSticker(
+    ctx: GrammyContext,
+    tenant: TenantContext,
+    sticker: NonNullable<Message["sticker"]>
+  ): Promise<boolean> {
+    if (!deps.stickers) return false;
+    const teach = deps.stickers.getTeachState(tenant.chatId);
+    if (!teach.enabled) return false;
+
+    const seedTarget = deps.stickers.currentSeedTarget(tenant.chatId);
+    const payload = {
+      ...(seedTarget ? { id: seedTarget.id } : {}),
+      fileId: sticker.file_id,
+      fileUniqueId: sticker.file_unique_id,
+      description: seedTarget?.description ?? "",
+      ...(sticker.emoji ? { emoji: sticker.emoji } : {}),
+      ...(sticker.set_name ? { setName: sticker.set_name } : {}),
+      ...(sticker.thumbnail?.file_id ? { thumbFileId: sticker.thumbnail.file_id } : {}),
+      isAnimated: sticker.is_animated,
+      isVideo: sticker.is_video,
+    };
+
+    // Seed pack: description is fixed — save immediately.
+    if (seedTarget) {
+      try {
+        const saved = deps.stickers.upsert(tenant.chatId, {
+          ...payload,
+          description: seedTarget.description,
+        });
+        const next = deps.stickers.advanceSeedAfterSave(tenant.chatId);
+        const followUp = next
+          ? `\n\nNext: _${next.description}_`
+          : "\n\n🌱 **Seed pack complete.** Teach mode is off.";
+        await sendRichReply(
+          ctx,
+          [`✅ Saved sticker \`${saved.id}\``, "", `_${saved.description}_`, followUp].join("\n")
+        );
+      } catch (e) {
+        await ctx.reply(`Could not save sticker: ${fmtError(e)}`, {
+          reply_to_message_id: ctx.message?.message_id,
+        });
+      }
+      return true;
+    }
+
+    // Free teach: ask for a text description (stickers have no captions in Telegram).
+    deps.stickers.setTeachState(tenant.chatId, {
+      enabled: true,
+      pendingPayload: payload,
+      pendingDesc: null,
+    });
+    await sendRichReply(
+      ctx,
+      [
+        "Got the sticker. Reply with a short description of when I should send it.",
+        "",
+        "_Example: ухмыляющийся хомяк / smug hamster_",
+        "",
+        "Or send `/stickers_teach` to cancel.",
+      ].join("\n")
+    );
+    return true;
+  }
+
+  async function handleTeachDescriptionText(
+    ctx: GrammyContext,
+    tenant: TenantContext,
+    text: string
+  ): Promise<boolean> {
+    if (!deps.stickers) return false;
+    const teach = deps.stickers.getTeachState(tenant.chatId);
+    if (!teach.enabled || !teach.pendingPayload) return false;
+    const description = text.trim();
+    if (!description) {
+      await ctx.reply("Send a non-empty description for the sticker.", {
+        reply_to_message_id: ctx.message?.message_id,
+      });
+      return true;
+    }
+    try {
+      const saved = deps.stickers.upsert(tenant.chatId, {
+        ...teach.pendingPayload,
+        description,
+      });
+      deps.stickers.setTeachState(tenant.chatId, {
+        enabled: true,
+        pendingPayload: null,
+        pendingDesc: null,
+      });
+      await sendRichReply(
+        ctx,
+        [
+          `✅ Saved sticker \`${saved.id}\``,
+          "",
+          `_${saved.description}_`,
+          "",
+          "Send another sticker to keep teaching, or `/stickers_teach` to stop.",
+        ].join("\n")
+      );
+    } catch (e) {
+      await ctx.reply(`Could not save sticker: ${fmtError(e)}`, {
+        reply_to_message_id: ctx.message?.message_id,
+      });
+    }
+    return true;
+  }
+
+  // --- Sticker handler (teach mode or vision) ---
+  bot.on("message:sticker", async (ctx) => {
+    const tenant = tenantFromGrammy(ctx);
+    const teachEnabled = deps.stickers?.getTeachState(tenant.chatId).enabled === true;
+    if (teachEnabled) {
+      // In DMs any sticker teaches; in groups still require a directed message.
+      if (!isDirectedAtBot(ctx) && ctx.chat?.type !== "private") return;
+      await enqueue(threadKey(tenant), async () => {
+        await handleTeachSticker(ctx, tenant, ctx.message.sticker);
+      });
+      return;
+    }
+
+    if (!isDirectedAtBot(ctx)) return;
+    if (deps.llm.supportsImages() === false) {
+      await ctx.reply(
+        "The current model does not support image input, so I can't see this sticker.",
+        { reply_to_message_id: ctx.message.message_id }
+      );
+      return;
+    }
+
+    const tk = threadKey(tenant);
+    await enqueue(tk, async (signal) => {
+      try {
+        const sticker = ctx.message.sticker;
+        const resolved = resolveVisualMedia({ kind: "sticker", sticker });
+        const tag = senderTag(ctx);
+        const contentParts: ContentPart[] = [];
+        const textPart = `${replyContext(ctx)}${tag}[sticker${sticker.emoji ? ` ${sticker.emoji}` : ""}]`;
+        contentParts.push({ type: "input_text", text: textPart });
+
+        if (resolved) {
+          const dataUrl = await downloadVisionDataUrl(
+            deps.botToken,
+            resolved.visionFileId,
+            (fileId) => ctx.api.getFile(fileId),
+            deps.maxAttachmentBytes
+          );
+          contentParts.push({ type: "input_image", image_url: dataUrl });
+        } else {
+          contentParts.push({
+            type: "input_text",
+            text: "[Sticker has no viewable thumbnail — animated/video without thumb]",
+          });
+        }
+
+        const userItem: ResponseInputItem = {
+          type: "message",
+          role: "user",
+          content: contentParts as never,
+        };
+        await runLlmReply(ctx, tenant, userItem, textPart, "sticker", { signal });
+      } catch (e) {
+        log.error({ ...serializeError(e) }, "Sticker preparation failed");
+        await ctx
+          .reply("Failed to process the sticker. Please try again or send text instead.", {
+            reply_to_message_id: ctx.message.message_id,
+          })
+          .catch(() => {});
+      }
+    });
+  });
+
+  // --- Animation / GIF handler ---
+  bot.on("message:animation", async (ctx) => {
+    if (!isDirectedAtBot(ctx)) return;
+    if (deps.llm.supportsImages() === false) {
+      await ctx.reply(
+        "The current model does not support image input, so I can't see this GIF.",
+        { reply_to_message_id: ctx.message.message_id }
+      );
+      return;
+    }
+
+    const tenant = tenantFromGrammy(ctx);
+    const tk = threadKey(tenant);
+    const captionRaw = ctx.message.caption?.trim() || "";
+    await enqueue(tk, async (signal) => {
+      try {
+        const animation = ctx.message.animation;
+        const resolved = resolveVisualMedia({ kind: "animation", animation });
+        const tag = senderTag(ctx);
+        const contentParts: ContentPart[] = [];
+        const textPart = `${replyContext(ctx)}${tag}${captionRaw || "[GIF]"}`;
+        contentParts.push({ type: "input_text", text: textPart });
+
+        if (resolved) {
+          const dataUrl = await downloadVisionDataUrl(
+            deps.botToken,
+            resolved.visionFileId,
+            (fileId) => ctx.api.getFile(fileId),
+            deps.maxAttachmentBytes
+          );
+          contentParts.push({ type: "input_image", image_url: dataUrl });
+        } else {
+          contentParts.push({
+            type: "input_text",
+            text: "[GIF has no thumbnail available]",
+          });
+        }
+
+        const userItem: ResponseInputItem = {
+          type: "message",
+          role: "user",
+          content: contentParts as never,
+        };
+        await runLlmReply(ctx, tenant, userItem, textPart, "animation", { signal });
+      } catch (e) {
+        log.error({ ...serializeError(e) }, "Animation preparation failed");
+        await ctx
+          .reply("Failed to process the GIF. Please try again or send text instead.", {
+            reply_to_message_id: ctx.message.message_id,
+          })
+          .catch(() => {});
+      }
+    });
+  });
 
   // --- Voice handler ---
   bot.on("message:voice", async (ctx) => {

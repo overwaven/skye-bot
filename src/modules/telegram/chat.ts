@@ -7,6 +7,7 @@ import type { ChatConfigService } from "../chatConfig/service.js";
 import type { SandboxService } from "../sandbox/service.js";
 import type { RemindersService } from "../reminders/service.js";
 import type { ChannelService } from "../channel/service.js";
+import type { StickersService } from "../stickers/service.js";
 import type { ToolDefinition } from "../../core/module.js";
 import type { TenantContext } from "../../core/tenant.js";
 import { threadKey } from "../../core/tenant.js";
@@ -25,6 +26,7 @@ export interface ChatLoopDeps {
   sandbox?: SandboxService;
   reminders?: RemindersService;
   channel?: ChannelService;
+  stickers?: StickersService;
   builtinTools: ToolDefinition[];
   allowConnectorTools?: boolean;
   hasReferenceImages?: boolean;
@@ -91,6 +93,7 @@ export async function runChatLoop(
     })),
   ];
 
+  const chatStickers = deps.stickers?.list(tenant.chatId) ?? [];
   const instructions = buildSystemPrompt(
     memories,
     chatContext,
@@ -104,7 +107,12 @@ export async function runChatLoop(
     deps.owner,
     !!deps.channel,
     userCfg?.personality,
-    chatPrompt
+    chatPrompt,
+    chatStickers.map((s) => ({
+      id: s.id,
+      description: s.description,
+      ...(s.emoji ? { emoji: s.emoji } : {}),
+    }))
   );
 
   // Log the request summary (last user item text + attachments).
