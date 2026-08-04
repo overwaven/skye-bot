@@ -16,13 +16,18 @@ export interface LlmModuleSettings {
   defaultModelId: string;
   maxCompletionTokens: number;
   useChatCompletions: boolean;
+  imageProvider?: "openrouter" | "xai";
   imageApiKey: string;
   imageBaseUrl: string;
   imageModel: string;
+  imageAspectRatio?: string;
+  imageResolution?: "1k" | "2k" | "";
   pdfEngine: string;
   pdfMaxBytes: number;
   perplexityApiKey?: string;
   perplexityBaseUrl: string;
+  xaiApiKey?: string;
+  xaiBaseUrl: string;
 }
 
 export interface LlmUsage {
@@ -348,6 +353,7 @@ export class LlmClient {
   readonly defaultModelId: string;
   private defaultClient: OpenAI;
   private perplexityClient: OpenAI | null = null;
+  private xaiClient: OpenAI | null = null;
 
   constructor(public readonly settings: LlmModuleSettings) {
     this.models = settings.models;
@@ -372,7 +378,7 @@ export class LlmClient {
       if (!this.perplexityClient) {
         if (!this.settings.perplexityApiKey) {
           throw new Error(
-            "A model with provider: \"perplexity\" is configured but PERPLEXITY_API_KEY is not set."
+            'A model with provider: "perplexity" is configured but perplexity_api_key is not set.'
           );
         }
         this.perplexityClient = new OpenAI({
@@ -381,6 +387,20 @@ export class LlmClient {
         });
       }
       return this.perplexityClient;
+    }
+    if (entry.provider === "xai") {
+      if (!this.xaiClient) {
+        if (!this.settings.xaiApiKey) {
+          throw new Error(
+            'A model with provider: "xai" is configured but xai_api_key is not set.'
+          );
+        }
+        this.xaiClient = new OpenAI({
+          baseURL: this.settings.xaiBaseUrl,
+          apiKey: this.settings.xaiApiKey,
+        });
+      }
+      return this.xaiClient;
     }
     return this.defaultClient;
   }
@@ -543,7 +563,9 @@ export class LlmClient {
       const baseUrl =
         entry.provider === "perplexity"
           ? this.settings.perplexityBaseUrl
-          : this.settings.baseUrl;
+          : entry.provider === "xai"
+            ? this.settings.xaiBaseUrl
+            : this.settings.baseUrl;
       const res = await fetch(`${baseUrl}/models`);
       if (!res.ok) {
         log.warn(`Models endpoint returned ${res.status}, skipping capability check`);
@@ -558,7 +580,9 @@ export class LlmClient {
       );
       if (found) {
         const modality = found.architecture?.modality ?? "";
-        this.supportsImagesCache = modality.toLowerCase().includes("image");
+        // xAI Grok chat models accept image inputs even when modality metadata is absent.
+        this.supportsImagesCache =
+          entry.provider === "xai" || modality.toLowerCase().includes("image");
         log.info(
           `Model "${entry.model}" image support: ${this.supportsImagesCache} (modality: "${modality}")`
         );
@@ -600,16 +624,50 @@ export class LlmClient {
   /**
    * Generate (or edit) an image via the configured image provider.
    * Uses IMAGE_BASE_URL/IMAGE_API_KEY when set, otherwise falls back to the
-   * main chat creds. Always uses IMAGE_MODEL. Image generation is a
-   * server-level capability, not metered per user model tier.
+   * main chat creds (or xAI creds when image.provider is "xai"). Always uses
+   * IMAGE_MODEL. Image generation is a server-level capability, not metered
+   * per user model tier.
    */
   async generateImage(
     prompt: string,
     imageUrls?: string[],
     signal?: AbortSignal
   ): Promise<Buffer | null> {
-    const apiKey = this.settings.imageApiKey || this.settings.apiKey;
-    const baseUrl = this.settings.imageBaseUrl || this.settings.baseUrl;
+    if (this.resolveImageProvider() === "xai") {
+      return this.generateImageViaXai(prompt, imageUrls, signal);
+    }
+    return this.generateImageViaOpenRouter(prompt, imageUrls, signal);
+  }
+
+  private resolveImageProvider(): "openrouter" | "xai" {
+    if (this.settings.imageProvider === "xai") return "xai";
+    if (this.settings.imageProvider === "openrouter") return "openrouter";
+    const base = (this.settings.imageBaseUrl || "").toLowerCase();
+    const model = this.settings.imageModel.toLowerCase();
+    if (base.includes("api.x.ai") || model.startsWith("grok-imagine")) return "xai";
+    return "openrouter";
+  }
+
+  private imageAuth(): { apiKey: string; baseUrl: string } {
+    if (this.resolveImageProvider() === "xai") {
+      const apiKey =
+        this.settings.imageApiKey || this.settings.xaiApiKey || this.settings.apiKey;
+      const baseUrl =
+        this.settings.imageBaseUrl || this.settings.xaiBaseUrl || "https://api.x.ai/v1";
+      return { apiKey, baseUrl: baseUrl.replace(/\/$/, "") };
+    }
+    return {
+      apiKey: this.settings.imageApiKey || this.settings.apiKey,
+      baseUrl: (this.settings.imageBaseUrl || this.settings.baseUrl).replace(/\/$/, ""),
+    };
+  }
+
+  private async generateImageViaOpenRouter(
+    prompt: string,
+    imageUrls?: string[],
+    signal?: AbortSignal
+  ): Promise<Buffer | null> {
+    const { apiKey, baseUrl } = this.imageAuth();
 
     const body: Record<string, unknown> = {
       model: this.settings.imageModel,
@@ -637,10 +695,79 @@ export class LlmClient {
       throw new Error(`Image generation failed (${res.status}): ${text}`);
     }
 
-    const data: { data?: { b64_json?: string }[] } = await res.json();
-    const b64 = data.data?.[0]?.b64_json;
-    if (!b64) return null;
+    const data: { data?: { b64_json?: string; url?: string }[] } = await res.json();
+    return this.bufferFromImageData(data.data?.[0], signal);
+  }
 
-    return Buffer.from(b64, "base64");
+  /**
+   * Grok Imagine: POST /images/generations or /images/edits.
+   * @see https://docs.x.ai/developers/model-capabilities/images/generation
+   * @see https://docs.x.ai/developers/model-capabilities/images/editing
+   */
+  private async generateImageViaXai(
+    prompt: string,
+    imageUrls?: string[],
+    signal?: AbortSignal
+  ): Promise<Buffer | null> {
+    const { apiKey, baseUrl } = this.imageAuth();
+    if (!apiKey) {
+      throw new Error('image.provider is "xai" but no xai_api_key / image.api_key is set.');
+    }
+
+    const refs = (imageUrls ?? []).slice(0, 3);
+    const body: Record<string, unknown> = {
+      model: this.settings.imageModel || "grok-imagine-image-quality",
+      prompt,
+      response_format: "b64_json",
+    };
+    if (this.settings.imageAspectRatio) {
+      body.aspect_ratio = this.settings.imageAspectRatio;
+    }
+    if (this.settings.imageResolution === "1k" || this.settings.imageResolution === "2k") {
+      body.resolution = this.settings.imageResolution;
+    }
+
+    let path = "/images/generations";
+    if (refs.length === 1) {
+      path = "/images/edits";
+      body.image = { url: refs[0], type: "image_url" };
+    } else if (refs.length > 1) {
+      path = "/images/edits";
+      body.images = refs.map((url) => ({ url, type: "image_url" }));
+    }
+
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`xAI image generation failed (${res.status}): ${text}`);
+    }
+
+    const data: { data?: { b64_json?: string; url?: string }[] } = await res.json();
+    return this.bufferFromImageData(data.data?.[0], signal);
+  }
+
+  private async bufferFromImageData(
+    item: { b64_json?: string; url?: string } | undefined,
+    signal?: AbortSignal
+  ): Promise<Buffer | null> {
+    if (!item) return null;
+    if (item.b64_json) return Buffer.from(item.b64_json, "base64");
+    if (item.url) {
+      const imgRes = await fetch(item.url, { signal });
+      if (!imgRes.ok) {
+        throw new Error(`Failed to download generated image (${imgRes.status})`);
+      }
+      return Buffer.from(await imgRes.arrayBuffer());
+    }
+    return null;
   }
 }

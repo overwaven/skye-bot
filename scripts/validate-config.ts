@@ -48,7 +48,13 @@ function main(): void {
   const cfg = result.data as {
     models?: Array<{ provider?: string }>;
     perplexity_api_key?: string;
-    voice?: { provider: string; yc_api_key: string };
+    xai_api_key?: string;
+    image?: { provider?: string; api_key?: string };
+    voice?: {
+      provider: string;
+      yc_api_key: string;
+      xai?: { api_key?: string };
+    };
     access?: { mode: string };
     billing?: { enabled: boolean };
     owner?: { user_id: number };
@@ -61,8 +67,27 @@ function main(): void {
     process.exit(1);
   }
 
+  const xaiChatUsed = cfg.models?.some((m) => m.provider === "xai") ?? false;
+  if (xaiChatUsed && !cfg.xai_api_key) {
+    console.error('✖ a model uses provider: "xai" but xai_api_key is unset');
+    process.exit(1);
+  }
+
+  if (cfg.image?.provider === "xai" && !cfg.image.api_key && !cfg.xai_api_key) {
+    console.error('✖ image.provider is "xai" but neither image.api_key nor xai_api_key is set');
+    process.exit(1);
+  }
+
   if (cfg.voice?.provider === "yandex" && !cfg.voice.yc_api_key) {
     warnings.push("voice.provider=yandex but voice.yc_api_key is unset");
+  }
+
+  if (
+    cfg.voice?.provider === "xai" &&
+    !cfg.voice.xai?.api_key &&
+    !cfg.xai_api_key
+  ) {
+    warnings.push("voice.provider=xai but voice.xai.api_key and xai_api_key are unset");
   }
 
   if (cfg.access?.mode === "subscription" && !cfg.billing?.enabled) {

@@ -5,6 +5,7 @@ import { SpeechService } from "./service.js";
 import { YandexSpeechProvider } from "./providers/yandex.js";
 import { OpenRouterSpeechProvider } from "./providers/openrouter.js";
 import { TinfoilSpeechProvider } from "./providers/tinfoil.js";
+import { XaiSpeechProvider } from "./providers/xai.js";
 import type { SpeechProvider } from "./types.js";
 
 declare module "../../core/module.js" {
@@ -60,6 +61,26 @@ export function buildProvider(config: SkyeConfig): SpeechProvider {
       ttsInstruct: tf.tts_instruct,
       sttInputFormat: tf.stt_format,
       sttLanguage: tf.stt_language,
+    });
+  }
+
+  if (voice.provider === "xai") {
+    const x = voice.xai;
+    const apiKey = x.api_key || config.xai_api_key || "";
+    const baseUrl = (x.base_url || config.xai_base_url || "https://api.x.ai/v1").replace(
+      /\/$/,
+      ""
+    );
+
+    return new XaiSpeechProvider({
+      apiKey,
+      baseUrl,
+      ttsVoice: x.tts_voice,
+      ttsLanguage: x.tts_language,
+      ttsSpeed: x.tts_speed,
+      ttsFormat: x.tts_format,
+      sttFormat: x.stt_format,
+      sttLanguage: x.stt_language,
     });
   }
 

@@ -20,13 +20,18 @@ export const llmModule: SkyeModule = {
       defaultModelId: c.default_model_id,
       maxCompletionTokens: c.max_completion_tokens,
       useChatCompletions: c.use_chat_completions,
+      imageProvider: c.image.provider,
       imageApiKey: c.image.api_key,
       imageBaseUrl: c.image.base_url,
       imageModel: c.image.model,
+      imageAspectRatio: c.image.aspect_ratio,
+      imageResolution: c.image.resolution,
       pdfEngine: c.pdf_engine,
       pdfMaxBytes: c.pdf_max_bytes,
       perplexityApiKey: c.perplexity_api_key,
       perplexityBaseUrl: c.perplexity_base_url,
+      xaiApiKey: c.xai_api_key,
+      xaiBaseUrl: c.xai_base_url,
     });
     return { service: client };
   },

@@ -3,7 +3,7 @@ import { section } from "../../core/config.js";
 
 export const speechConfigSchema = z.object({
   voice: section({
-      provider: z.enum(["yandex", "openrouter", "tinfoil"]).default("yandex"),
+      provider: z.enum(["yandex", "openrouter", "tinfoil", "xai"]).default("yandex"),
 
       yc_api_key: z.string().default(""),
       yc_folder_id: z.string().default(""),
@@ -39,6 +39,19 @@ export const speechConfigSchema = z.object({
           stt_format: z.enum(["mp3", "wav", "oggopus"]).default("mp3"),
           stt_language: z.string().default(""),
         }),
+
+      /** xAI Voice API (STT + TTS). Falls back to top-level xai_api_key when api_key is empty. */
+      xai: section({
+          api_key: z.string().default(""),
+          base_url: z.string().url().or(z.literal("")).default("https://api.x.ai/v1"),
+          tts_voice: z.string().default("eve"),
+          /** BCP-47 or "auto" — required by xAI TTS. */
+          tts_language: z.string().default("auto"),
+          tts_speed: z.number().min(0.7).max(1.5).default(1.0),
+          tts_format: z.enum(["mp3", "wav"]).default("mp3"),
+          stt_format: z.enum(["mp3", "wav", "oggopus"]).default("mp3"),
+          stt_language: z.string().default(""),
+        }),
     }),
 });
 
@@ -47,7 +60,7 @@ export type SpeechConfig = z.infer<typeof speechConfigSchema>;
 declare module "../../core/config.js" {
   interface SkyeConfig {
     voice: {
-      provider: "yandex" | "openrouter" | "tinfoil";
+      provider: "yandex" | "openrouter" | "tinfoil" | "xai";
       yc_api_key: string;
       yc_folder_id: string;
       yc_tts_voice: string;
@@ -75,6 +88,16 @@ declare module "../../core/config.js" {
         tts_model: string;
         tts_voice: string;
         tts_instruct: string;
+        stt_format: "mp3" | "wav" | "oggopus";
+        stt_language: string;
+      };
+      xai: {
+        api_key: string;
+        base_url: string;
+        tts_voice: string;
+        tts_language: string;
+        tts_speed: number;
+        tts_format: "mp3" | "wav";
         stt_format: "mp3" | "wav" | "oggopus";
         stt_language: string;
       };

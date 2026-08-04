@@ -11,6 +11,7 @@ import {
   validateTtsBytes,
 } from "../providers/openrouter.js";
 import { TinfoilSpeechProvider } from "../providers/tinfoil.js";
+import { buildXaiTtsText, XaiSpeechProvider } from "../providers/xai.js";
 import { SpeechService } from "../service.js";
 import { createSendVoiceTool } from "../tool.js";
 import type { SpeechProvider, SpeechSynthesisOptions } from "../types.js";
@@ -73,10 +74,17 @@ function makeConfig(overrides: Partial<SkyeConfig> = {}): SkyeConfig {
     default_model_id: "sydney",
     max_completion_tokens: 500,
     use_chat_completions: false,
-    image: { base_url: "", api_key: "", model: "" },
+    image: {
+      base_url: "",
+      api_key: "",
+      model: "",
+      aspect_ratio: "",
+      resolution: "",
+    },
     pdf_engine: "",
     pdf_max_bytes: 25 * 1024 * 1024,
     perplexity_base_url: "https://api.perplexity.ai/v1",
+    xai_base_url: "https://api.x.ai/v1",
     owner: { name: "", tag: "" },
     voice: {
       provider: "yandex",
@@ -107,6 +115,16 @@ function makeConfig(overrides: Partial<SkyeConfig> = {}): SkyeConfig {
         tts_model: "qwen3-tts",
         tts_voice: "vivian",
         tts_instruct: "",
+        stt_format: "mp3",
+        stt_language: "",
+      },
+      xai: {
+        api_key: "",
+        base_url: "https://api.x.ai/v1",
+        tts_voice: "eve",
+        tts_language: "auto",
+        tts_speed: 1.0,
+        tts_format: "mp3",
         stt_format: "mp3",
         stt_language: "",
       },
@@ -229,6 +247,43 @@ describe("speech module provider selection", () => {
     expect(result?.service).toBeDefined();
     expect(result?.service?.isSttAvailable()).toBe(true);
   });
+
+  it("builds xai provider with explicit key", () => {
+    const p = buildProvider(
+      makeConfig({
+        voice: {
+          ...makeConfig().voice,
+          provider: "xai",
+          xai: {
+            ...makeConfig().voice.xai,
+            api_key: "xai-key",
+          },
+        },
+      })
+    );
+    expect(p).toBeInstanceOf(XaiSpeechProvider);
+    expect(p.isSttAvailable()).toBe(true);
+    expect(p.isTtsAvailable()).toBe(true);
+    expect(p.getTtsCapabilities().defaultVoice).toBe("eve");
+  });
+
+  it("xai falls back to top-level xai_api_key", () => {
+    const p = buildProvider(
+      makeConfig({
+        xai_api_key: "global-xai",
+        voice: {
+          ...makeConfig().voice,
+          provider: "xai",
+          xai: {
+            ...makeConfig().voice.xai,
+            api_key: "",
+          },
+        },
+      })
+    );
+    expect(p).toBeInstanceOf(XaiSpeechProvider);
+    expect(p.isSttAvailable()).toBe(true);
+  });
 });
 
 describe("expressive speech", () => {
@@ -245,6 +300,47 @@ describe("expressive speech", () => {
 
   it("leaves a plain Gemini transcript unchanged", () => {
     expect(buildGeminiTtsInput("Привет", {})).toBe("Привет");
+  });
+
+  it("builds xAI TTS text with optional scene/style notes", () => {
+    expect(buildXaiTtsText("Hello", {})).toBe("Hello");
+    expect(buildXaiTtsText("Hello", { scene: "Quiet room", style: "soft" })).toBe(
+      "Quiet room soft\n\nHello"
+    );
+  });
+
+  it("xAI TTS posts voice_id/language and transcodes to OGG Opus", async () => {
+    const mp3 = await ffmpegSineMp3(0.4);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array(mp3), {
+        status: 200,
+        headers: { "Content-Type": "audio/mpeg" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const provider = new XaiSpeechProvider({
+      apiKey: "xai-key",
+      baseUrl: "https://api.x.ai/v1",
+      ttsVoice: "ara",
+      ttsLanguage: "en",
+      ttsSpeed: 1.1,
+      ttsFormat: "mp3",
+      sttFormat: "mp3",
+      sttLanguage: "",
+    });
+
+    const audio = await provider.synthesize("Hello from Grok", { voice: "leo" });
+    expect(audio?.subarray(0, 4).toString("ascii")).toBe("OggS");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.x.ai/v1/tts");
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      text: "Hello from Grok",
+      voice_id: "leo",
+      language: "en",
+      speed: 1.1,
+    });
   });
 
   it("parses Gemini PCM rate and channels from the response header", () => {

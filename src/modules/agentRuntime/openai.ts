@@ -154,6 +154,7 @@ class MeteredModel implements Model {
 export class OpenAIAgentsRuntime implements AgentRuntime {
   readonly engine = "openai_agents" as const;
   private readonly provider: OpenAIProvider;
+  private readonly xaiProvider: OpenAIProvider | null;
   private readonly runner: Runner;
 
   constructor(
@@ -167,6 +168,14 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
       useResponses: !deps.llm.settings.useChatCompletions,
       strictFeatureValidation: false,
     });
+    this.xaiProvider = deps.llm.settings.xaiApiKey
+      ? new OpenAIProvider({
+          apiKey: deps.llm.settings.xaiApiKey,
+          baseURL: deps.llm.settings.xaiBaseUrl,
+          useResponses: !deps.llm.settings.useChatCompletions,
+          strictFeatureValidation: false,
+        })
+      : null;
     this.runner = new Runner({
       modelProvider: this.provider,
       modelSettings: {
@@ -183,6 +192,7 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
 
   async close(): Promise<void> {
     await this.provider.close();
+    await this.xaiProvider?.close();
   }
 
   async run(request: AgentRunRequest): Promise<string> {
@@ -369,12 +379,24 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
     return text;
   }
 
+  private providerFor(entry: ModelEntry): OpenAIProvider {
+    if (entry.provider === "xai") {
+      if (!this.xaiProvider) {
+        throw new Error(
+          'A model with provider: "xai" is configured but xai_api_key is not set.'
+        );
+      }
+      return this.xaiProvider;
+    }
+    return this.provider;
+  }
+
   private async meteredModel(
     entry: ModelEntry,
     request: AgentRunRequest,
     runId: string
   ): Promise<Model> {
-    const model = await this.provider.getModel(entry.model);
+    const model = await this.providerFor(entry).getModel(entry.model);
     return new MeteredModel(
       model,
       entry.id,

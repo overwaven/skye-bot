@@ -48,6 +48,13 @@ base_url: "https://openrouter.ai/api/v1"
 perplexity_api_key: ""
 perplexity_base_url: "https://api.perplexity.ai/v1"
 
+# xAI (Grok) API — required only if any model has provider: "xai",
+# image.provider is "xai", or voice.provider is "xai" (voice may also set
+# its own key under voice.xai.api_key). Get a key at https://console.x.ai
+# Docs: https://docs.x.ai/developers/models
+xai_api_key: ""
+xai_base_url: "https://api.x.ai/v1"
+
 # The masked model catalog exposed to users. Each entry has a display name
 # (shown in the Mini App and /models), a real provider model id used for
 # the upstream call, and a token-cost multiplier. The underlying model id
@@ -55,13 +62,14 @@ perplexity_base_url: "https://api.perplexity.ai/v1"
 # `default_model_id` is the tier new subscribers start on.
 #
 # Optional fields per model:
-#   provider:    "openrouter" (default) or "perplexity".
+#   provider:    "openrouter" (default), "perplexity", or "xai".
 #                When "perplexity", the request is routed to the Perplexity
-#                Agent API (requires perplexity_api_key below). Perplexity
-#                models use the Responses API exclusively and can enable
-#                server-side tools (web_search, sandbox) that run on
-#                Perplexity's infrastructure — no MCP or client-side sandbox
-#                needed for those capabilities.
+#                Agent API (requires perplexity_api_key). Perplexity models
+#                use the Responses API exclusively and can enable server-side
+#                tools (web_search, sandbox) on Perplexity's infrastructure.
+#                When "xai", the request is routed to api.x.ai (requires
+#                xai_api_key). Supports Responses + Chat Completions; works
+#                with the openai_agents runtime.
 #   builtin_tools: list of Perplexity built-in tools to enable.
 #                "web_search"  — let the model search the web and cite sources.
 #                "fetch_url"   — let the model fetch a specific URL's content.
@@ -97,6 +105,13 @@ models:
   #     - web_search
   #     - sandbox
   #   preset: pro-search
+  # Example: Grok 4.5 via xAI. Requires xai_api_key above.
+  # - id: grok
+  #   name: Grok
+  #   model: grok-4.5
+  #   multiplier: 3.0
+  #   provider: xai
+  #   contextWindow: 500000
 
 # Force Chat Completions API instead of Responses API.
 # Set to true if your provider doesn't support the Responses API
@@ -165,11 +180,21 @@ billing:
 # Independent from chat — fill these in if your chat provider doesn't support
 # OpenRouter's chat-completions image modality (e.g. when base_url points to
 # Ollama). If left empty, falls back to base_url/openai_key above.
-# Recommended: OpenRouter with the Gemini image model.
+#
+# provider: "openrouter" (default) — POST {base_url}/images (OpenRouter-style)
+# provider: "xai" — Grok Imagine via POST /images/generations and /images/edits
+#   (requires xai_api_key, or image.api_key). Models:
+#   grok-imagine-image-quality (recommended), see https://docs.x.ai/developers/models
+# When provider is omitted, xAI is auto-detected if model starts with
+# "grok-imagine" or base_url points at api.x.ai.
 image:
+  # provider: "xai"
   base_url: ""
   api_key: ""
   model: "google/gemini-3.1-flash-image-preview"
+  # xAI-only optional knobs (ignored for OpenRouter):
+  # aspect_ratio: "1:1"   # 1:1, 16:9, 9:16, auto, …
+  # resolution: "1k"      # 1k | 2k
 
 # PDF parsing — when a user sends a PDF or replies to one, Skye passes it
 # to the LLM as a file input. OpenRouter-compatible providers can parse the
@@ -184,9 +209,9 @@ pdf_engine: ""
 pdf_max_bytes: 26214400
 
 # Voice (speech) provider — choose between Yandex SpeechKit, OpenRouter,
-# and Tinfoil. All three support STT (speech-to-text) and TTS (text-to-speech).
+# Tinfoil, and xAI. All support STT (speech-to-text) and TTS (text-to-speech).
 voice:
-  # "yandex" (default), "openrouter", or "tinfoil"
+  # "yandex" (default), "openrouter", "tinfoil", or "xai"
   provider: "yandex"
 
   # Yandex Cloud SpeechKit — single Api-Key drives both STT and TTS.
@@ -250,6 +275,27 @@ voice:
     # natural language. Empty string disables the instruct path.
     tts_instruct: "Speak very fast and cheerful. Bouncy, energetic young woman, smiling voice, punchy and bright. High energy, upbeat, lively delivery with no long pauses."
     stt_format: "mp3"
+    stt_language: ""
+
+  # xAI Voice API — STT (POST /v1/stt) + TTS (POST /v1/tts).
+  # Used when provider: "xai". Falls back to top-level xai_api_key when
+  # voice.xai.api_key is empty.
+  # Docs: https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
+  #       https://docs.x.ai/developers/model-capabilities/audio/speech-to-text
+  xai:
+    api_key: ""
+    base_url: "https://api.x.ai/v1"
+    # Built-in voices include: eve, ara, leo, rex, sal, lumen, castor, atlas, …
+    # Custom voice IDs from the xAI console also work.
+    tts_voice: "eve"
+    # BCP-47 language code or "auto" (required by the API).
+    tts_language: "auto"
+    # Speed multiplier 0.7 – 1.5
+    tts_speed: 1.0
+    # Output codec before OGG Opus transcoding for Telegram: mp3 | wav
+    tts_format: "mp3"
+    stt_format: "mp3"
+    # ISO-639-1 language for STT formatting; "" = omit
     stt_language: ""
 
 # Logging (pino)
