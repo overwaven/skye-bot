@@ -166,4 +166,31 @@ describe("xAI chat provider routing", () => {
     expect(client.resolveModel("grok").provider).toBe("xai");
     expect(client.resolveModel("grok").model).toBe("grok-4.5");
   });
+
+  test("use_chat_completions applies only to the default endpoint, not xAI", () => {
+    const client = makeClient({
+      useChatCompletions: true,
+      xaiApiKey: "xai-key",
+      models: [
+        {
+          id: "gemma",
+          name: "Gemma",
+          model: "google/gemma-4-e4b",
+          multiplier: 1,
+          contextWindow: 32_768,
+        },
+        {
+          id: "grok",
+          name: "Grok",
+          model: "grok-4.5",
+          multiplier: 3,
+          contextWindow: 500_000,
+          provider: "xai",
+        },
+      ],
+      defaultModelId: "gemma",
+    });
+    expect(client.usesChatCompletions(client.resolveModel("gemma"))).toBe(true);
+    expect(client.usesChatCompletions(client.resolveModel("grok"))).toBe(false);
+  });
 });

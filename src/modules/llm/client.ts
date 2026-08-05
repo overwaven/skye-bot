@@ -372,6 +372,18 @@ export class LlmClient {
     return this.modelById.get(modelId) ?? fallback;
   }
 
+  /**
+   * Whether this catalog entry should use Chat Completions instead of Responses.
+   * Global `use_chat_completions` only applies to the default OpenAI-compatible
+   * endpoint (OpenRouter / LM Studio / Ollama). Perplexity and xAI always use
+   * Responses so they can run side-by-side with a chat-completions local server.
+   */
+  usesChatCompletions(entry?: ModelEntry): boolean {
+    const resolved = entry ?? this.resolveModel();
+    if (resolved.provider === "perplexity" || resolved.provider === "xai") return false;
+    return this.settings.useChatCompletions;
+  }
+
   /** Get the OpenAI SDK client for a model's provider. */
   private clientFor(entry: ModelEntry): OpenAI {
     if (entry.provider === "perplexity") {
@@ -427,7 +439,7 @@ export class LlmClient {
   ): Promise<LlmResponse> {
     const entry = this.resolveModel(modelId);
     const client = this.clientFor(entry);
-    if (this.settings.useChatCompletions && entry.provider !== "perplexity") {
+    if (this.usesChatCompletions(entry)) {
       const completion = await client.chat.completions.create({
         model: entry.model,
         messages: [
@@ -480,9 +492,7 @@ export class LlmClient {
     modelId?: string
   ): LlmStream {
     const entry = this.resolveModel(modelId);
-    // Perplexity only supports the Responses API — never route to chat
-    // completions even when USE_CHAT_COMPLETIONS is globally true.
-    if (this.settings.useChatCompletions && entry.provider !== "perplexity") {
+    if (this.usesChatCompletions(entry)) {
       return this.askStreamViaChat(instructions, input, tools, modelId);
     }
     return this.askStreamViaResponses(instructions, input, tools, modelId) as unknown as LlmStream;
@@ -566,7 +576,15 @@ export class LlmClient {
           : entry.provider === "xai"
             ? this.settings.xaiBaseUrl
             : this.settings.baseUrl;
-      const res = await fetch(`${baseUrl}/models`);
+      const apiKey =
+        entry.provider === "perplexity"
+          ? this.settings.perplexityApiKey
+          : entry.provider === "xai"
+            ? this.settings.xaiApiKey
+            : this.settings.apiKey;
+      const res = await fetch(`${baseUrl}/models`, {
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+      });
       if (!res.ok) {
         log.warn(`Models endpoint returned ${res.status}, skipping capability check`);
         return;

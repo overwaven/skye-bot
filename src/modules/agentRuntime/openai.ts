@@ -162,17 +162,21 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
     private readonly config: AgentRuntimeConfig
   ) {
     setTracingDisabled(!config.tracing);
+    // Default OpenAI-compatible endpoint (OpenRouter / LM Studio / …).
+    // Honors use_chat_completions so local servers can avoid Responses.
     this.provider = new OpenAIProvider({
       apiKey: deps.llm.settings.apiKey,
       baseURL: deps.llm.settings.baseUrl,
       useResponses: !deps.llm.settings.useChatCompletions,
       strictFeatureValidation: false,
     });
+    // xAI always uses Responses so Grok can share a catalog with a
+    // chat-completions-only default endpoint without being forced off Responses.
     this.xaiProvider = deps.llm.settings.xaiApiKey
       ? new OpenAIProvider({
           apiKey: deps.llm.settings.xaiApiKey,
           baseURL: deps.llm.settings.xaiBaseUrl,
-          useResponses: !deps.llm.settings.useChatCompletions,
+          useResponses: true,
           strictFeatureValidation: false,
         })
       : null;
@@ -236,7 +240,7 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
               !definition.name.startsWith("sandbox_"))
         )
         .map(({ tool: sdkTool }) => sdkTool),
-      ...hostedToolsForModel(entry, this.deps.llm.settings.useChatCompletions),
+      ...hostedToolsForModel(entry, this.deps.llm.usesChatCompletions(entry)),
     ];
 
     const processEvent = async (event: RunStreamEvent, streamText: boolean) => {

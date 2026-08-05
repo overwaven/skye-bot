@@ -40,6 +40,20 @@ allowed_ids: ""
 openai_key: "sk-or-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 max_completion_tokens: 500
 base_url: "https://openrouter.ai/api/v1"
+# LM Studio (or any OpenAI-compatible local server) as the default endpoint:
+#   openai_key: "lm-studio"   # or the token from LM Studio Developer settings
+#   base_url: "http://127.0.0.1:1234/v1"
+#   use_chat_completions: true   # applies to base_url models only — not xAI/Perplexity
+#   models:
+#     - id: local
+#       name: Local
+#       model: google/gemma-4-e4b   # must match an id from GET /v1/models
+#       multiplier: 1.0
+#     - id: grok                   # still routes via xai_api_key + Responses API
+#       name: Grok
+#       model: grok-4.5
+#       provider: xai
+#       multiplier: 3.0
 
 # Perplexity Agent API — required only if any model in the catalog above
 # has provider: "perplexity". Get a key at https://console.perplexity.ai
@@ -113,9 +127,10 @@ models:
   #   provider: xai
   #   contextWindow: 500000
 
-# Force Chat Completions API instead of Responses API.
-# Set to true if your provider doesn't support the Responses API
-# (Ollama, vLLM, most self-hosted inference servers). Defaults to false.
+# Force Chat Completions API instead of Responses API for the default
+# OpenAI-compatible endpoint (base_url / openai_key). Does NOT force chat
+# completions on provider: xai or provider: perplexity models, so you can run
+# LM Studio + Grok side-by-side. Prefer true for LM Studio / Ollama / vLLM.
 # use_chat_completions: false
 
 # Agent execution engine. `openai_agents` uses the OpenAI Agents SDK for the
