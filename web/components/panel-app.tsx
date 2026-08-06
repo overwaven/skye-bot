@@ -40,6 +40,7 @@ import {
   IconRobot,
   IconSearch,
   IconServer,
+  IconSettings,
   IconShield,
   IconSparkles,
   IconStarFilled,
@@ -48,6 +49,7 @@ import {
   IconUser,
   IconWorld,
 } from "@tabler/icons-react"
+import { ConfigEditorSheet } from "@/components/config-editor"
 
 import {
   Accordion,
@@ -130,6 +132,7 @@ import {
   bindTelegramBackButton,
   webApp,
 } from "@/lib/telegram"
+import { cn } from "@/lib/utils"
 
 type TabKey = "profile" | "connectors" | "memory" | "plus" | "activity"
 type PanelIcon = ComponentType<{ className?: string }>
@@ -262,6 +265,8 @@ export function PanelApp() {
   const [search, setSearch] = useState("")
   const [aboutOpen, setAboutOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
+  const configCloseRef = useRef<(() => void) | null>(null)
   const [agentsOpen, setAgentsOpen] = useState(false)
   const [agents, setAgents] = useState<AgentsResponse | null>(null)
   const [agentEditing, setAgentEditing] = useState<
@@ -394,13 +399,24 @@ export function PanelApp() {
         ? () => setConnectorEditing(null)
         : agentsOpen
           ? () => setAgentsOpen(false)
-          : adminOpen
-            ? () => setAdminOpen(false)
-            : aboutOpen
-              ? () => setAboutOpen(false)
-              : null
+          : configOpen
+            ? () => {
+                configCloseRef.current?.()
+              }
+            : adminOpen
+              ? () => setAdminOpen(false)
+              : aboutOpen
+                ? () => setAboutOpen(false)
+                : null
     return bindTelegramBackButton(close)
-  }, [aboutOpen, adminOpen, agentEditing, agentsOpen, connectorEditing])
+  }, [
+    aboutOpen,
+    adminOpen,
+    agentEditing,
+    agentsOpen,
+    configOpen,
+    connectorEditing,
+  ])
 
   const updateConfig = (patch: Partial<UserConfig>) => {
     setConfig((current) => ({ ...current, ...patch }))
@@ -574,6 +590,7 @@ export function PanelApp() {
               onSave={() => void saveConfig()}
               onAgents={() => setAgentsOpen(true)}
               onAdmin={() => setAdminOpen(true)}
+              onConfig={() => setConfigOpen(true)}
               onAbout={() => setAboutOpen(true)}
               onPlus={() => setTab("plus")}
             />
@@ -651,6 +668,11 @@ export function PanelApp() {
         onOpenChange={setAdminOpen}
         onChange={setAdmins}
       />
+      <ConfigEditorSheet
+        open={configOpen}
+        onOpenChange={setConfigOpen}
+        onRequestCloseRef={configCloseRef}
+      />
       <AgentsSheet
         data={agents}
         open={agentsOpen}
@@ -688,6 +710,7 @@ function ProfileView({
   onSave,
   onAgents,
   onAdmin,
+  onConfig,
   onAbout,
   onPlus,
 }: {
@@ -704,6 +727,7 @@ function ProfileView({
   onSave: () => void
   onAgents: () => void
   onAdmin: () => void
+  onConfig: () => void
   onAbout: () => void
   onPlus: () => void
 }) {
@@ -843,10 +867,21 @@ function ProfileView({
           <CardHeader>
             <CardTitle className="font-heading text-2xl">Workspace</CardTitle>
             <CardDescription>
-              Specialists, access, and project information.
+              {about?.isOwner
+                ? "Specialists, access, server config, and project information."
+                : "Specialists, access, and project information."}
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-3">
+          <CardContent
+            className={cn(
+              "grid gap-2",
+              about?.isOwner
+                ? "sm:grid-cols-2"
+                : about?.isAdmin
+                  ? "sm:grid-cols-3"
+                  : "sm:grid-cols-2"
+            )}
+          >
             <Button
               variant="secondary"
               className="h-12 justify-between"
@@ -865,6 +900,18 @@ function ProfileView({
               >
                 <span className="flex items-center gap-2">
                   <IconShield /> Administration
+                </span>
+                <IconChevronRight />
+              </Button>
+            )}
+            {about?.isOwner && (
+              <Button
+                variant="secondary"
+                className="h-12 justify-between"
+                onClick={onConfig}
+              >
+                <span className="flex items-center gap-2">
+                  <IconSettings /> Server config
                 </span>
                 <IconChevronRight />
               </Button>

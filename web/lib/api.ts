@@ -242,6 +242,39 @@ export interface BillingEvent {
   createdAt: string
 }
 
+export interface SystemConfigSection {
+  key: string
+  line: number
+}
+
+export interface SystemConfigIssue {
+  path: string
+  message: string
+}
+
+export interface SystemConfigResponse {
+  name: string
+  path: string
+  size: number
+  mtimeMs: number
+  etag: string
+  byteLength: number
+  content: string
+  sections: SystemConfigSection[]
+  restartRequired: boolean
+  note: string
+  warnings?: string[]
+  backupName?: string | null
+  restartScheduled?: boolean
+}
+
+export interface SystemConfigValidateResult {
+  ok: boolean
+  issues?: SystemConfigIssue[]
+  warnings: string[]
+  sections: SystemConfigSection[]
+}
+
 export const api = {
   getAbout: () => request<AboutInfo>("/about"),
   getAdminPrincipals: () =>
@@ -254,6 +287,17 @@ export const api = {
   removeAdminPrincipal: (userId: number) =>
     request<{ admins: AdminPrincipal[] }>(`/admin/principals/${userId}`, {
       method: "DELETE",
+    }),
+  getSystemConfig: () => request<SystemConfigResponse>("/admin/system-config"),
+  validateSystemConfig: (content: string) =>
+    request<SystemConfigValidateResult>("/admin/system-config/validate", {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+  saveSystemConfig: (content: string, etag: string, restart = false) =>
+    request<SystemConfigResponse>("/admin/system-config", {
+      method: "PUT",
+      body: JSON.stringify({ content, etag, restart }),
     }),
   getConfig: () => request<UserConfig>("/config"),
   updateConfig: (config: UserConfig) =>

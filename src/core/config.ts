@@ -36,6 +36,7 @@ export interface SkyeConfig {
 }
 
 let cachedConfig: SkyeConfig | null = null;
+let runtimeSchema: ZodObject<ZodRawShape> | null = null;
 
 /**
  * Compose the root Zod schema from every module's `configSchema`, plus the
@@ -52,6 +53,11 @@ export function composeSchema(modules: readonly SkyeModule[]): ZodObject<ZodRawS
     shape = { ...shape, ...(mod.configSchema as ZodObject<ZodRawShape>).shape };
   }
   return z.object(shape);
+}
+
+/** Schema used at boot — available to runtime validation (panel config editor). */
+export function getRuntimeConfigSchema(): ZodObject<ZodRawShape> | null {
+  return runtimeSchema;
 }
 
 /**
@@ -77,6 +83,7 @@ export function loadConfig(modules: readonly SkyeModule[]): SkyeConfig {
   }
 
   const schema = composeSchema(modules);
+  runtimeSchema = schema;
   const result = schema.safeParse(raw);
   if (!result.success) {
     const issues = result.error.issues
@@ -93,4 +100,5 @@ export function loadConfig(modules: readonly SkyeModule[]): SkyeConfig {
 /** For tests: reset the cache so the next `loadConfig` re-parses. */
 export function resetConfigCache(): void {
   cachedConfig = null;
+  runtimeSchema = null;
 }
