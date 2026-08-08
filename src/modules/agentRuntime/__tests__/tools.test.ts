@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "../../../core/db.js";
 import { ChatAgentService } from "../chatAgents.js";
 import { UserAgentService } from "../userAgents.js";
