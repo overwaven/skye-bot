@@ -1,21 +1,27 @@
 import { getDb } from "../../core/db.js";
 
 export interface UserConfig {
+  /** @deprecated Migrated into primary agent instructions; kept for legacy reads. */
   systemPrompt?: string;
+  /** @deprecated Migrated into primary agents; kept for legacy reads. */
   personality?: "skye" | "skye.exe" | "operator" | "muse";
+  /** Stored personal agent id without the `my_` prefix. */
+  primaryAgentId?: string;
 }
 
 type ConfigRow = {
   systemPrompt: string | null;
   personality: string | null;
+  primaryAgentId: string | null;
 };
 
 export function getUserConfig(userId: number): UserConfig {
   const row = getDb()
-    .prepare<
-      [number],
-      ConfigRow
-    >(`SELECT system_prompt AS systemPrompt, personality FROM user_configs WHERE user_id = ?`)
+    .prepare<[number], ConfigRow>(
+      `SELECT system_prompt AS systemPrompt, personality,
+              primary_agent_id AS primaryAgentId
+       FROM user_configs WHERE user_id = ?`
+    )
     .get(userId);
   if (!row) return {};
   return {
@@ -23,6 +29,7 @@ export function getUserConfig(userId: number): UserConfig {
     personality: (["skye", "skye.exe", "operator", "muse"].includes(row.personality ?? "")
       ? row.personality
       : "skye") as UserConfig["personality"],
+    ...(row.primaryAgentId ? { primaryAgentId: row.primaryAgentId } : {}),
   };
 }
 
@@ -32,13 +39,33 @@ export function setUserConfig(userId: number, config: UserConfig): void {
 
   getDb()
     .prepare(
-      `INSERT INTO user_configs (user_id, system_prompt, personality)
-       VALUES (?, ?, ?)
+      `INSERT INTO user_configs (user_id, system_prompt, personality, primary_agent_id)
+       VALUES (?, ?, ?, ?)
        ON CONFLICT(user_id) DO UPDATE SET
          system_prompt = excluded.system_prompt,
-         personality = excluded.personality`
+         personality = excluded.personality,
+         primary_agent_id = excluded.primary_agent_id`
     )
-    .run(userId, merged.systemPrompt ?? null, merged.personality ?? "skye");
+    .run(
+      userId,
+      merged.systemPrompt ?? null,
+      merged.personality ?? "skye",
+      merged.primaryAgentId ?? null
+    );
+}
+
+export function getPrimaryAgentId(userId: number): string | undefined {
+  return getUserConfig(userId).primaryAgentId;
+}
+
+export function setPrimaryAgentId(userId: number, agentId: string | null): void {
+  const existing = getUserConfig(userId);
+  setUserConfig(userId, { ...existing, primaryAgentId: agentId ?? undefined });
+  if (agentId === null) {
+    getDb()
+      .prepare("UPDATE user_configs SET primary_agent_id = NULL WHERE user_id = ?")
+      .run(userId);
+  }
 }
 
 export interface UserCustomConnector {
@@ -202,6 +229,8 @@ export function deleteConnectorSession(userId: number, provider: string): boolea
 export interface UserConfigService {
   get(userId: number): UserConfig;
   set(userId: number, config: UserConfig): void;
+  getPrimaryAgentId(userId: number): string | undefined;
+  setPrimaryAgentId(userId: number, agentId: string | null): void;
   listCustomConnectors(userId: number): UserCustomConnector[];
   getCustomConnector(id: number, userId: number): UserCustomConnector | null;
   addCustomConnector(userId: number, name: string, config: Record<string, unknown>): number;
@@ -224,6 +253,8 @@ export interface UserConfigService {
 export const userConfigService: UserConfigService = {
   get: getUserConfig,
   set: setUserConfig,
+  getPrimaryAgentId,
+  setPrimaryAgentId,
   listCustomConnectors: getUserCustomConnectors,
   getCustomConnector: getUserCustomConnector,
   addCustomConnector: addUserCustomConnector,

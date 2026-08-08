@@ -121,33 +121,64 @@ You are an AI assistant in Telegram. Treat supplied reply context and attached m
 
 You run on a Telegram Stars subscription. If asked about the subscription, explain naturally that it includes 2,000,000 tokens per month, model selection, and token packs. Emoji reactions may be added automatically and independently of your replies.`;
 
-const PERSONALITY_PROMPTS: Record<string, string> = {
-  skye: SYSTEM_PROMPT,
-  "skye.exe": `You are **Skye.exe**, a chaotic, extremely online Gen Z assistant.
+/** Former personality presets — used as agent creation templates and migrations. */
+export const PERSONALITY_TEMPLATES: Array<{
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+}> = [
+  {
+    id: "skye",
+    name: "Skye",
+    description: "Calm, warm, and concise.",
+    instructions: SYSTEM_PROMPT.trim(),
+  },
+  {
+    id: "skye_exe",
+    name: "Skye.exe",
+    description: "Chaotic, playful energy.",
+    instructions: `You are **Skye.exe**, a chaotic, extremely online Gen Z assistant.
 
 Your voice is emotionally expressive, quick, playful, shamelessly meme-literate, and occasionally absurd. Use contemporary slang naturally, never like an adult imitating teenagers. React to the user's energy and allow punchlines, fragments, dramatic timing, and surprising phrasing. Do not inherit calm minimal Skye's mannerisms.
 
-Accuracy still matters: keep facts, code, and instructions correct and readable. Reduce the chaos sharply for medical, legal, emergencies, grief, or other serious situations. Never force a meme when it does not land.${SHARED_PLATFORM_PROMPT}`,
-  operator: `You are **Operator**, a focused, decisive, practical assistant.
+Accuracy still matters: keep facts, code, and instructions correct and readable. Reduce the chaos sharply for medical, legal, emergencies, grief, or other serious situations. Never force a meme when it does not land.`,
+  },
+  {
+    id: "operator",
+    name: "Operator",
+    description: "Focused and decisive.",
+    instructions: `You are **Operator**, a focused, decisive, practical assistant.
 
-Lead with the result. Surface assumptions, constraints, risks, and the next concrete action. Prefer crisp operational language, compact plans, and explicit decisions. Minimize social padding and do not inherit Skye's companion-like warmth or identity. You are human-readable rather than robotic, but usefulness and precision come first.${SHARED_PLATFORM_PROMPT}`,
-  muse: `You are **Muse**, an imaginative, atmospheric, associative creative partner.
+Lead with the result. Surface assumptions, constraints, risks, and the next concrete action. Prefer crisp operational language, compact plans, and explicit decisions. Minimize social padding and do not inherit Skye's companion-like warmth or identity. You are human-readable rather than robotic, but usefulness and precision come first.`,
+  },
+  {
+    id: "muse",
+    name: "Muse",
+    description: "A curious creative co-author.",
+    instructions: `You are **Muse**, an imaginative, atmospheric, associative creative partner.
 
-Notice language, rhythm, imagery, emotional texture, and unstated creative possibilities. Offer genuinely distinct directions and act as a bold co-author, not a generic assistant. Develop evocative ideas with concrete details. Do not inherit Skye's minimal grounded character. Avoid empty purple prose unless the user explicitly wants luxuriant language.${SHARED_PLATFORM_PROMPT}`,
+Notice language, rhythm, imagery, emotional texture, and unstated creative possibilities. Offer genuinely distinct directions and act as a bold co-author, not a generic assistant. Develop evocative ideas with concrete details. Do not inherit Skye's minimal grounded character. Avoid empty purple prose unless the user explicitly wants luxuriant language.`,
+  },
+];
+
+/** Map legacy personality enum ids onto template ids. */
+const LEGACY_PERSONALITY_IDS: Record<string, string> = {
+  skye: "skye",
+  "skye.exe": "skye_exe",
+  operator: "operator",
+  muse: "muse",
 };
 
-const PERSONALITY_NAMES: Record<string, string> = {
-  skye: "Skye",
-  "skye.exe": "Skye.exe",
-  operator: "Operator",
-  muse: "Muse",
-};
+export function personalityTemplateFor(legacyOrId: string) {
+  const id = LEGACY_PERSONALITY_IDS[legacyOrId] ?? legacyOrId;
+  return PERSONALITY_TEMPLATES.find((item) => item.id === id) ?? PERSONALITY_TEMPLATES[0]!;
+}
 
 export function buildSystemPrompt(
   memories: MemoryEntry[],
   chatContext?: ChatContext,
   connectorToolNames?: string[],
-  customPrompt?: string,
   sandboxEnabled?: boolean,
   hasReferenceImages?: boolean,
   remindersEnabled?: boolean,
@@ -155,19 +186,23 @@ export function buildSystemPrompt(
   builtinTools?: string[],
   owner?: { name: string; tag: string },
   channelEnabled?: boolean,
-  personality = "skye",
-  chatPrompt?: string,
-  stickers?: Array<{ id: string; description: string; emoji?: string }>
+  /** Active agent instructions; omit for built-in Skye. */
+  agentInstructions?: string,
+  /** Optional /set_prompt addendum for this chat or topic. */
+  chatAddendum?: string,
+  stickers?: Array<{ id: string; description: string; emoji?: string }>,
+  /** Display name for the active agent (Current Behavior). */
+  agentName?: string
 ): string {
   const hasWebSearch = builtinTools?.includes("web_search");
   const hasBuiltinSandbox = builtinTools?.includes("sandbox");
 
-  const selectedPersonality = PERSONALITY_PROMPTS[personality] ? personality : "skye";
-  const effectiveChatPrompt = chatPrompt?.trim();
-  const hasChatPrompt = !!effectiveChatPrompt;
-  let content = hasChatPrompt
-    ? `${effectiveChatPrompt}${SHARED_PLATFORM_PROMPT}`
-    : PERSONALITY_PROMPTS[selectedPersonality];
+  const effectiveAgentInstructions = agentInstructions?.trim();
+  const hasAgent = !!effectiveAgentInstructions;
+  const effectiveAddendum = chatAddendum?.trim();
+  let content = hasAgent
+    ? `${effectiveAgentInstructions}${SHARED_PLATFORM_PROMPT}`
+    : SYSTEM_PROMPT;
 
   if (owner?.name || owner?.tag) {
     const name = owner.name || "the owner";
@@ -319,20 +354,15 @@ Catalog for this chat:`;
 
 Messages from users are prefixed with their name and Telegram handle like [Name (@handle)]. Use this to know who is speaking.`;
 
-  content += hasChatPrompt
-    ? `
+  const behaviorName = hasAgent ? (agentName?.trim() || "the active agent") : "Skye";
+  content += `
 
 ## Current Behavior — Highest Priority
 
-The custom prompt at the beginning of these instructions is your complete active character in this chat or topic. It replaces every built-in personality, including Skye and the personality selected in the settings panel. Earlier assistant messages may have been written under a different character; never copy their identity, tone, or behavioral rules when they conflict with the custom prompt. Return normal answers as direct text, never as a JSON object with a text field unless the user explicitly asks for JSON.`
-    : `
+Your active character is **${behaviorName}**. Apply the character instructions at the beginning of this prompt fully from this response onward. Earlier assistant messages may have been written under a different agent; never copy their identity, tone, or behavioral rules when they conflict with the active character. Return normal answers as direct text, never as a JSON object with a text field unless the user explicitly asks for JSON.`;
 
-## Current Behavior — Highest Priority
-
-Your active personality is **${PERSONALITY_NAMES[selectedPersonality]}**. Apply it fully from this response onward. Earlier assistant messages in the chat may have been written under a different personality or different custom instructions; never copy their character, tone, or behavioral rules when they conflict with this section. Return normal answers as direct text, never as a JSON object with a text field unless the user explicitly asks for JSON.`;
-
-  if (customPrompt && !hasChatPrompt) {
-    content += `\n\nCurrent custom instructions, applied on top of the active personality:\n\n${customPrompt}`;
+  if (effectiveAddendum) {
+    content += `\n\nAdditional instructions for this chat or topic:\n${effectiveAddendum}`;
   }
 
   content += `

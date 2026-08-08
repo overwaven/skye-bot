@@ -9,6 +9,7 @@ const OWNER = 92_001;
 beforeEach(() => {
   getDb().prepare("DELETE FROM user_thread_agents WHERE owner_user_id = ?").run(OWNER);
   getDb().prepare("DELETE FROM user_agents WHERE owner_user_id = ?").run(OWNER);
+  getDb().prepare("DELETE FROM user_configs WHERE user_id = ?").run(OWNER);
 });
 
 function response() {
@@ -43,7 +44,6 @@ async function invoke(route: PanelRoute, body?: unknown, params: Record<string, 
 describe("personal agent panel routes", () => {
   it("creates agents with a supported model and selects them", async () => {
     const services = new ServiceRegistry();
-    const resetAgent = vi.fn();
     services.set("llm", {
       models: [
         {
@@ -64,13 +64,12 @@ describe("personal agent panel routes", () => {
         },
       ],
     } as never);
-    services.set("chatConfig", { resetAgent } as never);
     const userAgents = new UserAgentService(getDb(), 10);
     const routes = buildAgentRoutes(
       {
         db: getDb(),
         services,
-        config: { agent_runtime: { max_user_agents: 10 } },
+        config: { agent_runtime: { max_user_agents: 10, agents: [] } },
       } as unknown as ModuleContext,
       userAgents
     );
@@ -90,11 +89,16 @@ describe("personal agent panel routes", () => {
       agentId: "my_release_editor",
     });
     expect(selected.body).toEqual({ ok: true, activeAgentId: "my_release_editor" });
-    expect(resetAgent).toHaveBeenCalledWith(OWNER, undefined);
+
+    const primary = await invoke(find("put", "/agents/primary"), {
+      agentId: "my_release_editor",
+    });
+    expect(primary.body).toEqual({ ok: true, primaryAgentId: "my_release_editor" });
 
     const listed = await invoke(find("get", "/agents"));
     expect(listed.body).toMatchObject({
       activeAgentId: "my_release_editor",
+      primaryAgentId: "my_release_editor",
       models: [{ id: "fast", name: "Fast", multiplier: 1 }],
     });
   });
@@ -102,12 +106,11 @@ describe("personal agent panel routes", () => {
   it("rejects unsupported agent models", async () => {
     const services = new ServiceRegistry();
     services.set("llm", { models: [] } as never);
-    services.set("chatConfig", { resetAgent: vi.fn() } as never);
     const routes = buildAgentRoutes(
       {
         db: getDb(),
         services,
-        config: { agent_runtime: { max_user_agents: 10 } },
+        config: { agent_runtime: { max_user_agents: 10, agents: [] } },
       } as unknown as ModuleContext,
       new UserAgentService(getDb(), 10)
     );

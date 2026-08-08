@@ -78,40 +78,6 @@ export function resetChatThreadPrompt(chatId: number, threadId?: number): boolea
   );
 }
 
-export function getChatThreadAgent(chatId: number, threadId?: number): string | undefined {
-  return getDb()
-    .prepare<[number, number], { agentId: string }>(
-      `SELECT agent_id AS agentId
-       FROM chat_thread_agents
-       WHERE chat_id = ? AND thread_id = ?`
-    )
-    .get(chatId, storedThreadId(threadId))?.agentId;
-}
-
-export function setChatThreadAgent(
-  chatId: number,
-  threadId: number | undefined,
-  agentId: string
-): void {
-  getDb()
-    .prepare(
-      `INSERT INTO chat_thread_agents (chat_id, thread_id, agent_id, updated_at)
-       VALUES (?, ?, ?, ?)
-       ON CONFLICT(chat_id, thread_id) DO UPDATE SET
-         agent_id = excluded.agent_id,
-         updated_at = excluded.updated_at`
-    )
-    .run(chatId, storedThreadId(threadId), agentId, new Date().toISOString());
-}
-
-export function resetChatThreadAgent(chatId: number, threadId?: number): boolean {
-  return (
-    getDb()
-      .prepare("DELETE FROM chat_thread_agents WHERE chat_id = ? AND thread_id = ?")
-      .run(chatId, storedThreadId(threadId)).changes > 0
-  );
-}
-
 export interface ChatConfigService {
   get(chatId: number): ChatApiConfig;
   setVoiceReplyMode(chatId: number, mode: VoiceReplyMode): void;
@@ -119,9 +85,6 @@ export interface ChatConfigService {
   getPrompt(chatId: number, threadId?: number): string | undefined;
   setPrompt(chatId: number, threadId: number | undefined, prompt: string): void;
   resetPrompt(chatId: number, threadId?: number): boolean;
-  getAgent(chatId: number, threadId?: number): string | undefined;
-  setAgent(chatId: number, threadId: number | undefined, agentId: string): void;
-  resetAgent(chatId: number, threadId?: number): boolean;
 }
 
 export const chatConfigService: ChatConfigService = {
@@ -131,7 +94,4 @@ export const chatConfigService: ChatConfigService = {
   getPrompt: getChatThreadPrompt,
   setPrompt: setChatThreadPrompt,
   resetPrompt: resetChatThreadPrompt,
-  getAgent: getChatThreadAgent,
-  setAgent: setChatThreadAgent,
-  resetAgent: resetChatThreadAgent,
 };

@@ -10,6 +10,7 @@ describe("agent runtime config", () => {
     expect(config.tracing).toBe(false);
     expect(config.trace_include_sensitive_data).toBe(false);
     expect(config.max_user_agents).toBe(10);
+    expect(config.max_chat_agents).toBe(10);
   });
 
   it("accepts configurable specialist profiles", () => {
@@ -47,7 +48,7 @@ describe("agent runtime config", () => {
     ).toThrow(/Duplicate agent id/);
   });
 
-  it("reserves my_ ids for private user agents", () => {
+  it("reserves my_ and chat_ ids for private and shared agents", () => {
     expect(() =>
       agentRuntimeConfigSchema.parse({
         agent_runtime: {
@@ -57,6 +58,20 @@ describe("agent runtime config", () => {
               name: "Writer",
               description: "Writes",
               instructions: "Write well.",
+            },
+          ],
+        },
+      })
+    ).toThrow(/reserved/);
+    expect(() =>
+      agentRuntimeConfigSchema.parse({
+        agent_runtime: {
+          agents: [
+            {
+              id: "chat_helper",
+              name: "Helper",
+              description: "Helps",
+              instructions: "Help well.",
             },
           ],
         },

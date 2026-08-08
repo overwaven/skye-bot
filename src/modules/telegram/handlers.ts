@@ -918,6 +918,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         const proactiveOn = deps.proactive?.isEnabled() ?? false;
         const reminderCount = deps.reminders?.list(tenant.chatId).length ?? 0;
         const customPrompt = deps.chatConfig.getPrompt(tenant.chatId, tenant.threadId);
+        const activeAgent = deps.agentRuntime.activeProfileFor(tenant);
 
         const yes = "✅";
         const no = "❌";
@@ -943,7 +944,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           `| **Vision** | ${vision === true ? yes : vision === false ? no : warn + " unknown"} |`,
           `| **Voice input** | ${deps.speech.isSttAvailable() ? yes : no} |`,
           `| **Voice replies** | ${chatCfg.voiceReplyMode} |`,
-          `| **Personality** | ${customPrompt ? "custom prompt" : "panel selection"} |`,
+          `| **Agent** | ${activeAgent?.name ?? "Default Skye"}${customPrompt ? " + addendum" : ""} |`,
           `| **TTS** | ${deps.speech.isTtsAvailable() ? yes : no} |`,
           `| **Memories** | ${memoryCount} |`,
           `| **Context items** | ${ctxCount} |`,

@@ -40,8 +40,7 @@ export type Personality = "skye" | "skye.exe" | "operator" | "muse"
 export type VoiceReplyMode = "text" | "auto" | "always"
 
 export interface UserConfig {
-  systemPrompt?: string
-  personality?: Personality
+  primaryAgentId?: string
 }
 
 export interface ChatConfig {
@@ -166,11 +165,20 @@ export interface PersonalAgent {
   updatedAt: string
 }
 
+export interface AgentTemplate {
+  id: string
+  name: string
+  description: string
+  instructions: string
+}
+
 export interface AgentsResponse {
   agents: PersonalAgent[]
   activeAgentId: string | null
+  primaryAgentId: string | null
   maxAgents: number
   models: ModelEntry[]
+  templates: AgentTemplate[]
 }
 
 export interface PersonalAgentInput {
@@ -327,7 +335,12 @@ export const api = {
       method: "DELETE",
     }),
   selectAgent: (agentId: string | null) =>
-    request<{ ok: true }>("/agents/selection", {
+    request<{ ok: true; activeAgentId: string | null }>("/agents/selection", {
+      method: "PUT",
+      body: JSON.stringify({ agentId }),
+    }),
+  setPrimaryAgent: (agentId: string | null) =>
+    request<{ ok: true; primaryAgentId: string | null }>("/agents/primary", {
       method: "PUT",
       body: JSON.stringify({ agentId }),
     }),

@@ -145,11 +145,13 @@ agent_runtime:
   # unless explicitly enabled; sensitive payloads remain excluded by default.
   tracing: false
   trace_include_sensitive_data: false
-  # Each Telegram user can create private profiles with /create_agent. They
-  # are visible only to their owner and use the currently selected chat model.
+  # Each Telegram user can create private agents (DMs). Groups have a shared
+  # chat-owned library managed by Telegram/bot admins.
   max_user_agents: 10
-  # Profiles are exposed to the active agent as delegate_<id> tools. Users can
-  # also select one as the primary personality per chat/topic with /agent <id>.
+  max_chat_agents: 10
+  # YAML profiles are installable templates. Selecting one forks an editable
+  # personal or chat agent. Users set a primary personal agent with
+  # /agent primary <id>; groups share one active agent via /agent <id>.
   agents:
     - id: researcher
       name: Researcher

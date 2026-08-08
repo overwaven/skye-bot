@@ -88,7 +88,7 @@ export const chatConfigModule: SkyeModule = {
             setChatThreadPrompt(tenant.chatId, tenant.threadId, prompt);
             await sendRichReply(
               ctx,
-              `Custom prompt set for ${scopeLabel(tenant.threadId)}. It now replaces the personality selected in the panel here.`
+              `Additional instructions set for ${scopeLabel(tenant.threadId)}. They apply on top of the active agent.`
             );
           },
         },
@@ -100,7 +100,7 @@ export const chatConfigModule: SkyeModule = {
             if (!prompt) {
               await sendRichReply(
                 ctx,
-                `No custom prompt is set for ${scopeLabel(tenant.threadId)}. The panel personality is active.`
+                `No additional instructions are set for ${scopeLabel(tenant.threadId)}. The active agent (or Default Skye) is used as-is.`
               );
               return;
             }
@@ -118,8 +118,8 @@ export const chatConfigModule: SkyeModule = {
             await sendRichReply(
               ctx,
               removed
-                ? `Custom prompt reset for ${scopeLabel(tenant.threadId)}. The panel personality is active again.`
-                : `No custom prompt was set for ${scopeLabel(tenant.threadId)}. The panel personality is already active.`
+                ? `Additional instructions cleared for ${scopeLabel(tenant.threadId)}.`
+                : `No additional instructions were set for ${scopeLabel(tenant.threadId)}.`
             );
           },
         },

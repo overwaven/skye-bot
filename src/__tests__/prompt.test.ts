@@ -56,26 +56,18 @@ describe("buildSystemPrompt", () => {
   });
 
   test("includes sandbox section when enabled", () => {
-    const prompt = buildSystemPrompt([], undefined, undefined, undefined, true);
+    const prompt = buildSystemPrompt([], undefined, undefined, true);
     expect(prompt).toContain("Daytona Sandbox");
     expect(prompt).toContain("sandbox_run_command");
   });
 
   test("omits sandbox section when disabled", () => {
-    const prompt = buildSystemPrompt([], undefined, undefined, undefined, false);
+    const prompt = buildSystemPrompt([], undefined, undefined, false);
     expect(prompt).not.toContain("Daytona Sandbox");
   });
 
   test("includes reminders section when enabled", () => {
-    const prompt = buildSystemPrompt(
-      [],
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      true
-    );
+    const prompt = buildSystemPrompt([], undefined, undefined, undefined, undefined, true);
     expect(prompt).toContain("## Reminders");
     expect(prompt).toContain("set_reminder");
   });
@@ -103,7 +95,6 @@ describe("buildSystemPrompt", () => {
       undefined,
       undefined,
       undefined,
-      undefined,
       { name: "Melissa", tag: "miss_sterling" }
     );
     expect(prompt).toContain("Melissa");
@@ -114,7 +105,6 @@ describe("buildSystemPrompt", () => {
   test("includes channel section when enabled", () => {
     const prompt = buildSystemPrompt(
       [],
-      undefined,
       undefined,
       undefined,
       undefined,
@@ -145,7 +135,7 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("feminine");
   });
 
-  test("non-default personalities replace Skye's character", () => {
+  test("agent instructions replace built-in Skye", () => {
     const prompt = buildSystemPrompt(
       [],
       undefined,
@@ -157,20 +147,21 @@ describe("buildSystemPrompt", () => {
       undefined,
       undefined,
       undefined,
+      "You are **Operator**, a focused assistant.",
       undefined,
-      "operator"
+      undefined,
+      "Operator"
     );
     expect(prompt).toContain("You are **Operator**");
+    expect(prompt).toContain("Your active character is **Operator**");
     expect(prompt).not.toContain("You are **Skye**, a calm");
-    expect(prompt).not.toContain("You are always Skye");
   });
 
-  test("a chat prompt completely replaces the panel personality", () => {
+  test("chat addendum applies on top of the active agent", () => {
     const prompt = buildSystemPrompt(
       [],
       undefined,
       undefined,
-      "These panel instructions must also be disabled.",
       undefined,
       undefined,
       undefined,
@@ -178,31 +169,34 @@ describe("buildSystemPrompt", () => {
       undefined,
       undefined,
       undefined,
-      "operator",
-      "You are a patient Socratic tutor."
+      "You are a patient Socratic tutor.",
+      "Prefer short questions.",
+      undefined,
+      "Tutor"
     );
 
     expect(prompt).toContain("You are a patient Socratic tutor.");
-    expect(prompt).toContain("replaces every built-in personality");
-    expect(prompt).not.toContain("You are **Operator**");
+    expect(prompt).toContain("Additional instructions for this chat or topic:");
+    expect(prompt).toContain("Prefer short questions.");
     expect(prompt).not.toContain("You are **Skye**, a calm");
-    expect(prompt).not.toContain("These panel instructions must also be disabled.");
   });
 
-  test("places current behavior and custom instructions after chat history", () => {
+  test("places current behavior and addendum after chat history", () => {
     const prompt = buildSystemPrompt(
       [],
       { chatTitle: "Test", recentLog: "Skye: old behavior" },
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "You are Operator.",
       "Answer in clipped sentences.",
       undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      "operator"
+      "Operator"
     );
     expect(prompt.indexOf("Current Behavior — Highest Priority")).toBeGreaterThan(
       prompt.indexOf("Recent messages:")
@@ -221,7 +215,6 @@ describe("buildSystemPrompt", () => {
   test("includes sticker catalog when provided", () => {
     const prompt = buildSystemPrompt(
       [],
-      undefined,
       undefined,
       undefined,
       undefined,

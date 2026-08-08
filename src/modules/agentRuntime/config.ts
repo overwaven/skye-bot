@@ -7,7 +7,8 @@ export const agentProfileSchema = z.object({
     .min(1)
     .max(48)
     .regex(/^[a-z][a-z0-9_-]*$/)
-    .refine((id) => !id.startsWith("my_"), 'Agent ids beginning with "my_" are reserved'),
+    .refine((id) => !id.startsWith("my_"), 'Agent ids beginning with "my_" are reserved')
+    .refine((id) => !id.startsWith("chat_"), 'Agent ids beginning with "chat_" are reserved'),
   name: z.string().min(1).max(80),
   description: z.string().min(1).max(500),
   instructions: z.string().min(1).max(16_000),
@@ -37,6 +38,7 @@ export const agentRuntimeConfigSchema = z.object({
     tracing: z.boolean().default(false),
     trace_include_sensitive_data: z.boolean().default(false),
     max_user_agents: z.number().int().min(1).max(50).default(10),
+    max_chat_agents: z.number().int().min(1).max(50).default(10),
     agents: agentProfilesSchema.default([]),
   }),
 });

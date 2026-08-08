@@ -3,6 +3,7 @@ import type { ModuleContext, PanelRoute } from "../../core/module.js";
 import type { PanelRequest } from "../panel/index.js";
 import type { UserAgentInput, UserAgentRecord, UserAgentService } from "./userAgents.js";
 import { personalProfileId } from "./userAgents.js";
+import { PERSONALITY_TEMPLATES } from "../llm/prompt.js";
 
 function serialize(agent: UserAgentRecord) {
   return {
@@ -26,7 +27,6 @@ export function buildAgentRoutes(ctx: ModuleContext, userAgents: UserAgentServic
   const llm = ctx.services.get("llm");
   const models = llm.models.filter((model) => model.provider !== "perplexity");
   const modelIds = new Set(models.map((model) => model.id));
-  const chatConfig = ctx.services.get("chatConfig");
   const audit = () => (ctx.services.has("audit") ? ctx.services.get("audit") : null);
 
   const parseInput = (body: unknown): Omit<UserAgentInput, "id"> => {
@@ -48,15 +48,36 @@ export function buildAgentRoutes(ctx: ModuleContext, userAgents: UserAgentServic
       handler: (req, res) => {
         const tenant = (req as PanelRequest).tenant;
         const userId = tenant.userId!;
+        const activeAgentId =
+          userAgents.getSelection(userId, tenant.chatId, tenant.threadId) ??
+          userAgents.getPrimary(userId) ??
+          null;
         res.json({
           agents: userAgents.list(userId).map(serialize),
-          activeAgentId: userAgents.getSelection(userId, tenant.chatId, tenant.threadId) ?? null,
+          activeAgentId,
+          primaryAgentId: userAgents.getPrimary(userId) ?? null,
           maxAgents: ctx.config.agent_runtime.max_user_agents,
           models: models.map((model) => ({
             id: model.id,
             name: model.name,
             multiplier: model.multiplier,
           })),
+          templates: [
+            ...PERSONALITY_TEMPLATES.map((template) => ({
+              id: template.id,
+              name: template.name,
+              description: template.description,
+              instructions: template.instructions,
+            })),
+            ...ctx.config.agent_runtime.agents
+              .filter((agent) => agent.enabled)
+              .map((agent) => ({
+                id: agent.id,
+                name: agent.name,
+                description: agent.description,
+                instructions: agent.instructions,
+              })),
+          ],
         });
       },
     },
@@ -93,10 +114,8 @@ export function buildAgentRoutes(ctx: ModuleContext, userAgents: UserAgentServic
         try {
           if (agentId === null || agentId === "") {
             userAgents.resetSelection(userId, tenant.chatId, tenant.threadId);
-            chatConfig.resetAgent(tenant.chatId, tenant.threadId);
           } else if (typeof agentId === "string") {
             userAgents.setSelection(userId, tenant.chatId, tenant.threadId, agentId);
-            chatConfig.resetAgent(tenant.chatId, tenant.threadId);
           } else {
             throw new Error("agentId must be a string or null");
           }
@@ -105,7 +124,37 @@ export function buildAgentRoutes(ctx: ModuleContext, userAgents: UserAgentServic
             userId,
             details: { agentId: agentId || null, source: "panel" },
           });
-          res.json({ ok: true, activeAgentId: agentId || null });
+          const activeAgentId =
+            userAgents.getSelection(userId, tenant.chatId, tenant.threadId) ??
+            userAgents.getPrimary(userId) ??
+            null;
+          res.json({ ok: true, activeAgentId });
+        } catch (error) {
+          res.status(400).json({ error: errorText(error) });
+        }
+      },
+    },
+    {
+      method: "put",
+      path: "/agents/primary",
+      handler: (req, res) => {
+        const tenant = (req as PanelRequest).tenant;
+        const userId = tenant.userId!;
+        const agentId = (req.body as { agentId?: unknown } | undefined)?.agentId;
+        try {
+          if (agentId === null || agentId === "") {
+            userAgents.setPrimary(userId, null);
+          } else if (typeof agentId === "string") {
+            userAgents.setPrimary(userId, agentId);
+          } else {
+            throw new Error("agentId must be a string or null");
+          }
+          audit()?.event({
+            action: "personal_agent_primary_set",
+            userId,
+            details: { agentId: agentId || null, source: "panel" },
+          });
+          res.json({ ok: true, primaryAgentId: userAgents.getPrimary(userId) ?? null });
         } catch (error) {
           res.status(400).json({ error: errorText(error) });
         }

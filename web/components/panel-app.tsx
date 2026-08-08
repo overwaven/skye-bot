@@ -117,7 +117,6 @@ import {
   type PersonalAgentInput,
   type Plans,
   type Stats,
-  type UserConfig,
 } from "@/lib/api"
 import { formatDate, formatDuration, formatTokens } from "@/lib/format"
 import {
@@ -144,33 +143,6 @@ const NAV: Array<{ value: TabKey; label: string; icon: PanelIcon }> = [
   { value: "plus", label: "Plus", icon: IconSparkles },
   { value: "activity", label: "Usage", icon: IconActivity },
 ]
-
-const PERSONALITIES = [
-  {
-    value: "skye",
-    label: "Skye",
-    description: "Calm, warm, and concise.",
-    icon: IconSparkles,
-  },
-  {
-    value: "skye.exe",
-    label: "Skye.exe",
-    description: "Chaotic, playful energy.",
-    icon: IconCode,
-  },
-  {
-    value: "operator",
-    label: "Operator",
-    description: "Focused and decisive.",
-    icon: IconShield,
-  },
-  {
-    value: "muse",
-    label: "Muse",
-    description: "A curious creative co-author.",
-    icon: IconBrain,
-  },
-] as const
 
 const EMPTY_CONNECTORS: ConnectorsResponse = {
   managed: { enabled: false, connectors: [] },
@@ -235,10 +207,6 @@ export function PanelApp() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [user, setUser] = useState({ name: "Telegram user", handle: "" })
-  const [config, setConfig] = useState<UserConfig>({
-    personality: "skye",
-    systemPrompt: "",
-  })
   const [chatConfig, setChatConfig] = useState<ChatConfig>({
     voiceReplyMode: "text",
   })
@@ -260,7 +228,6 @@ export function PanelApp() {
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([])
   const [monitoring, setMonitoring] = useState<Monitoring | null>(null)
   const [monitoringFailed, setMonitoringFailed] = useState(false)
-  const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [search, setSearch] = useState("")
   const [aboutOpen, setAboutOpen] = useState(false)
@@ -294,7 +261,6 @@ export function PanelApp() {
       }
 
       const [
-        nextConfig,
         nextChat,
         nextConnectors,
         nextMemories,
@@ -304,7 +270,6 @@ export function PanelApp() {
         nextPlans,
         nextAbout,
       ] = await Promise.all([
-        api.getConfig(),
         api.getChatConfig(),
         api.getConnectors(),
         api.getMemories(),
@@ -315,7 +280,6 @@ export function PanelApp() {
         api.getAbout(),
       ])
 
-      setConfig(nextConfig)
       setChatConfig(nextChat)
       setConnectors(nextConnectors)
       setMemories(nextMemories)
@@ -417,26 +381,6 @@ export function PanelApp() {
     configOpen,
     connectorEditing,
   ])
-
-  const updateConfig = (patch: Partial<UserConfig>) => {
-    setConfig((current) => ({ ...current, ...patch }))
-    setDirty(true)
-  }
-
-  const saveConfig = async () => {
-    setBusy(true)
-    try {
-      setConfig(await api.updateConfig(config))
-      setDirty(false)
-      haptic.success()
-      toast.success("Profile saved")
-    } catch (error) {
-      haptic.error()
-      toast.error(error instanceof Error ? error.message : String(error))
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const setVoiceMode = async (voiceReplyMode: ChatConfig["voiceReplyMode"]) => {
     const previous = chatConfig
@@ -578,16 +522,11 @@ export function PanelApp() {
           <TabsContent value="profile" className="animate-panel-in">
             <ProfileView
               user={user}
-              config={config}
               chatConfig={chatConfig}
               account={account}
               activeModel={activeModel}
               about={about}
-              dirty={dirty}
-              busy={busy}
-              onConfigChange={updateConfig}
               onVoiceChange={(mode) => void setVoiceMode(mode)}
-              onSave={() => void saveConfig()}
               onAgents={() => setAgentsOpen(true)}
               onAdmin={() => setAdminOpen(true)}
               onConfig={() => setConfigOpen(true)}
@@ -698,16 +637,11 @@ export function PanelApp() {
 
 function ProfileView({
   user,
-  config,
   chatConfig,
   account,
   activeModel,
   about,
-  dirty,
-  busy,
-  onConfigChange,
   onVoiceChange,
-  onSave,
   onAgents,
   onAdmin,
   onConfig,
@@ -715,27 +649,17 @@ function ProfileView({
   onPlus,
 }: {
   user: { name: string; handle: string }
-  config: UserConfig
   chatConfig: ChatConfig
   account: BillingAccount | null
   activeModel?: ModelEntry
   about: AboutInfo | null
-  dirty: boolean
-  busy: boolean
-  onConfigChange: (patch: Partial<UserConfig>) => void
   onVoiceChange: (mode: ChatConfig["voiceReplyMode"]) => void
-  onSave: () => void
   onAgents: () => void
   onAdmin: () => void
   onConfig: () => void
   onAbout: () => void
   onPlus: () => void
 }) {
-  const personality = PERSONALITIES.find(
-    (item) => item.value === (config.personality ?? "skye")
-  )
-  const PersonalityIcon = personality?.icon ?? IconSparkles
-
   return (
     <>
       <ViewHeading
@@ -767,39 +691,7 @@ function ProfileView({
           </CardContent>
         </Card>
 
-        <Card className="panel-card rounded-3xl">
-          <CardHeader>
-            <CardTitle className="font-heading text-2xl">Personality</CardTitle>
-            <CardDescription>{personality?.description}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Select
-              value={config.personality ?? "skye"}
-              onValueChange={(value) =>
-                onConfigChange({
-                  personality: value as UserConfig["personality"],
-                })
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue>
-                  <PersonalityIcon />
-                  {personality?.label ?? "Skye"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {PERSONALITIES.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    <item.icon />
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </CardContent>
-        </Card>
-
-        <Card className="panel-card rounded-3xl">
+        <Card className="panel-card rounded-3xl md:col-span-2">
           <CardHeader>
             <CardTitle className="font-heading text-2xl">
               Voice replies
@@ -828,48 +720,11 @@ function ProfileView({
 
         <Card className="panel-card rounded-3xl md:col-span-2">
           <CardHeader>
-            <CardTitle className="font-heading text-2xl">
-              Custom instructions
-            </CardTitle>
-            <CardDescription>
-              Applied on top of the selected personality in every new response.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Textarea
-              rows={5}
-              value={config.systemPrompt ?? ""}
-              onChange={(event) =>
-                onConfigChange({ systemPrompt: event.target.value })
-              }
-              placeholder="For example: reply in Spanish and keep technical answers concise."
-              className="resize-none rounded-2xl"
-            />
-            {dirty && (
-              <Button
-                size="lg"
-                className="w-full sm:w-auto"
-                disabled={busy}
-                onClick={onSave}
-              >
-                {busy ? (
-                  <IconLoader2 className="animate-spin" />
-                ) : (
-                  <IconCheck />
-                )}{" "}
-                Save changes
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="panel-card rounded-3xl md:col-span-2">
-          <CardHeader>
             <CardTitle className="font-heading text-2xl">Workspace</CardTitle>
             <CardDescription>
               {about?.isOwner
-                ? "Specialists, access, server config, and project information."
-                : "Specialists, access, and project information."}
+                ? "Agents, access, server config, and project information."
+                : "Agents, access, and project information."}
             </CardDescription>
           </CardHeader>
           <CardContent
@@ -2133,9 +1988,47 @@ function AgentsSheet({
   const select = async (agentId: string | null) => {
     if (!data) return
     try {
-      await api.selectAgent(agentId)
-      onChange({ ...data, activeAgentId: agentId })
+      const result = await api.selectAgent(agentId)
+      onChange({ ...data, activeAgentId: result.activeAgentId })
       haptic.success()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const setPrimary = async (agentId: string | null) => {
+    if (!data) return
+    try {
+      const result = await api.setPrimaryAgent(agentId)
+      onChange({ ...data, primaryAgentId: result.primaryAgentId })
+      haptic.success()
+      toast.success(agentId ? "Primary agent updated" : "Primary agent cleared")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const createFromTemplate = async (templateId: string) => {
+    if (!data) return
+    const template = data.templates.find((item) => item.id === templateId)
+    if (!template) return
+    try {
+      const created = await api.createAgent({
+        name: template.name,
+        description: template.description,
+        instructions: template.instructions,
+        modelId: null,
+      })
+      const primary = await api.setPrimaryAgent(created.id)
+      const selected = await api.selectAgent(created.id)
+      onChange({
+        ...data,
+        agents: [...data.agents, created],
+        activeAgentId: selected.activeAgentId,
+        primaryAgentId: primary.primaryAgentId,
+      })
+      haptic.success()
+      toast.success(`${template.name} ready`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     }
@@ -2146,7 +2039,7 @@ function AgentsSheet({
       open={open}
       onOpenChange={onOpenChange}
       title="Personal agents"
-      description="Build specialists with dedicated instructions and models."
+      description="Build specialists with dedicated instructions and models. Primary applies everywhere; Active overrides this chat."
       footer={
         <Button
           className="w-full"
@@ -2163,64 +2056,106 @@ function AgentsSheet({
           <Skeleton className="h-20 rounded-2xl" />
         </div>
       ) : (
-        <div className="space-y-2">
-          <button
-            type="button"
-            className="flex w-full items-center gap-3 rounded-2xl border p-4 text-left"
-            onClick={() => void select(null)}
-          >
-            <Avatar>
-              <AvatarFallback>
-                <IconSparkles />
-              </AvatarFallback>
-            </Avatar>
-            <span className="min-w-0 flex-1">
-              <span className="block font-medium">Default Skye</span>
-              <span className="block text-xs text-muted-foreground">
-                Main personality and model
-              </span>
-            </span>
-            {data.activeAgentId === null && <Badge>Active</Badge>}
-          </button>
-          {data.agents.map((agent) => (
-            <div
-              key={agent.id}
-              className="flex items-center gap-2 rounded-2xl border p-2"
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-2xl border p-4 text-left"
+              onClick={() => void select(null)}
             >
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-3 p-2 text-left"
-                onClick={() => void select(agent.id)}
-              >
-                <Avatar>
-                  <AvatarFallback>
-                    <IconRobot />
-                  </AvatarFallback>
-                </Avatar>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium">
-                    {agent.name}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {agent.description || "Personal specialist"}
-                  </span>
+              <Avatar>
+                <AvatarFallback>
+                  <IconSparkles />
+                </AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">Default Skye</span>
+                <span className="block text-xs text-muted-foreground">
+                  Built-in character and current chat model
                 </span>
-                {data.activeAgentId === agent.id && <Badge>Active</Badge>}
-              </button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Edit ${agent.name}`}
-                onClick={() => onEdit(agent)}
+              </span>
+              {data.activeAgentId === null && <Badge>Active</Badge>}
+            </button>
+            {data.agents.map((agent) => (
+              <div
+                key={agent.id}
+                className="flex items-center gap-2 rounded-2xl border p-2"
               >
-                <IconEdit />
-              </Button>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 p-2 text-left"
+                  onClick={() => void select(agent.id)}
+                >
+                  <Avatar>
+                    <AvatarFallback>
+                      <IconRobot />
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">
+                      {agent.name}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {agent.description || "Personal specialist"}
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 gap-1">
+                    {data.primaryAgentId === agent.id && (
+                      <Badge variant="outline">Primary</Badge>
+                    )}
+                    {data.activeAgentId === agent.id && <Badge>Active</Badge>}
+                  </span>
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Make ${agent.name} primary`}
+                  onClick={() =>
+                    void setPrimary(
+                      data.primaryAgentId === agent.id ? null : agent.id
+                    )
+                  }
+                >
+                  <IconSparkles />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Edit ${agent.name}`}
+                  onClick={() => onEdit(agent)}
+                >
+                  <IconEdit />
+                </Button>
+              </div>
+            ))}
+            {data.agents.length === 0 && (
+              <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                Your specialist team is waiting to be built.
+              </p>
+            )}
+          </div>
+          {data.templates.length > 0 && data.agents.length < data.maxAgents && (
+            <div className="space-y-2">
+              <p className="px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Start from a template
+              </p>
+              {data.templates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  className="flex w-full items-center gap-3 rounded-2xl border border-dashed p-3 text-left"
+                  onClick={() => void createFromTemplate(template.id)}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{template.name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {template.description}
+                    </span>
+                  </span>
+                  <IconPlus className="size-4 shrink-0 text-muted-foreground" />
+                </button>
+              ))}
             </div>
-          ))}
-          {data.agents.length === 0 && (
-            <p className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-              Your specialist team is waiting to be built.
-            </p>
           )}
         </div>
       )}
@@ -2270,11 +2205,11 @@ function AgentDialog({
     try {
       if (editing === "new") {
         const created = await api.createAgent(draft)
-        await api.selectAgent(created.id)
+        const selected = await api.selectAgent(created.id)
         onChange({
           ...data,
           agents: [...data.agents, created],
-          activeAgentId: created.id,
+          activeAgentId: selected.activeAgentId,
         })
       } else if (editing) {
         const updated = await api.updateAgent(editing.id, draft)
@@ -2305,6 +2240,8 @@ function AgentDialog({
         agents: data.agents.filter((agent) => agent.id !== editing.id),
         activeAgentId:
           data.activeAgentId === editing.id ? null : data.activeAgentId,
+        primaryAgentId:
+          data.primaryAgentId === editing.id ? null : data.primaryAgentId,
       })
       onEditing(null)
       toast.success("Agent deleted")

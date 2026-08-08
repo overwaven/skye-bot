@@ -159,4 +159,15 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    id: "008-primary-agent",
+    up: (db) => {
+      const cols = new Set(
+        (db.pragma("table_info(user_configs)") as { name: string }[]).map((c) => c.name)
+      );
+      if (!cols.has("primary_agent_id")) {
+        db.exec("ALTER TABLE user_configs ADD COLUMN primary_agent_id TEXT");
+      }
+    },
+  },
 ];

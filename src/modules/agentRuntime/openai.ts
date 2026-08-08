@@ -425,6 +425,25 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
     return entry;
   }
 
+  private resolveActive(tenant: AgentRunRequest["tenant"]): AgentProfile | undefined {
+    if (tenant.chatType === "private") {
+      const override = tenant.userId
+        ? this.deps.userAgents.getSelection(tenant.userId, tenant.chatId, tenant.threadId)
+        : undefined;
+      if (override) {
+        return this.deps.userAgents.profiles(tenant.userId!).find((p) => p.id === override);
+      }
+      const primary = tenant.userId ? this.deps.userAgents.getPrimary(tenant.userId) : undefined;
+      return primary
+        ? this.deps.userAgents.profiles(tenant.userId!).find((p) => p.id === primary)
+        : undefined;
+    }
+    const selected = this.deps.chatAgents.getSelection(tenant.chatId);
+    return selected
+      ? this.deps.chatAgents.profiles(tenant.chatId).find((p) => p.id === selected)
+      : undefined;
+  }
+
   private async prepare(request: AgentRunRequest) {
     const memoryQuery = extractInputText(request.input);
     const memories = this.deps.memory.context(request.tenant.chatId, memoryQuery, 12);
@@ -433,28 +452,17 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
       request.allowConnectorTools === false
         ? []
         : await this.deps.connectors.toolsFor(request.tenant.userId);
-    const userCfg = request.tenant.userId
-      ? this.deps.userConfig.get(request.tenant.userId)
-      : undefined;
     const threadPrompt = this.deps.chatConfig.getPrompt(
       request.tenant.chatId,
       request.tenant.threadId
     );
-    const personalAgentId = request.tenant.userId
-      ? this.deps.userAgents.getSelection(
-          request.tenant.userId,
-          request.tenant.chatId,
-          request.tenant.threadId
-        )
-      : undefined;
-    const selectedAgentId =
-      personalAgentId ??
-      this.deps.chatConfig.getAgent(request.tenant.chatId, request.tenant.threadId);
+    const activeProfile = this.resolveActive(request.tenant);
     const profiles = [
       ...this.config.agents.filter((profile) => profile.enabled),
-      ...(request.tenant.userId ? this.deps.userAgents.profiles(request.tenant.userId) : []),
+      ...(request.tenant.chatType === "private" && request.tenant.userId
+        ? this.deps.userAgents.profiles(request.tenant.userId)
+        : this.deps.chatAgents.profiles(request.tenant.chatId)),
     ];
-    const activeProfile = profiles.find((profile) => profile.id === selectedAgentId);
     const modelEntry = this.deps.llm.resolveModel(request.modelId);
     const tools: RuntimeTool[] = [
       ...request.builtinTools.map((definition) => this.builtinRuntimeTool(definition, request)),
@@ -469,15 +477,11 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
     ];
     const promptFor = (profile?: AgentProfile) => {
       const promptModel = profile ? this.modelForProfile(profile, modelEntry) : modelEntry;
-      const configuredPrompt = profile
-        ? `${profile.instructions}${threadPrompt ? `\n\nAdditional instructions for this chat or topic:\n${threadPrompt}` : ""}`
-        : threadPrompt;
       const chatStickers = this.deps.stickers?.list(request.tenant.chatId) ?? [];
       return buildSystemPrompt(
         memories,
         chatContext,
         connectorTools.map((definition) => definition.name),
-        userCfg?.systemPrompt,
         this.deps.sandbox?.isEnabled(),
         request.hasReferenceImages,
         !!this.deps.reminders,
@@ -485,13 +489,14 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
         promptModel.builtinTools,
         request.owner,
         !!this.deps.channel,
-        userCfg?.personality,
-        configuredPrompt,
+        profile?.instructions,
+        threadPrompt,
         chatStickers.map((s) => ({
           id: s.id,
           description: s.description,
           ...(s.emoji ? { emoji: s.emoji } : {}),
-        }))
+        })),
+        profile?.name
       );
     };
     let streamedText = "";

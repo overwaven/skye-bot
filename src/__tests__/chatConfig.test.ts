@@ -2,11 +2,8 @@ import { test, expect, describe, beforeEach } from "vitest";
 import {
   chatConfigService,
   getChatConfig,
-  getChatThreadAgent,
   getChatThreadPrompt,
-  resetChatThreadAgent,
   resetChatThreadPrompt,
-  setChatThreadAgent,
   setChatThreadPrompt,
   setChatVoiceReplyMode,
 } from "../modules/chatConfig/service.js";
@@ -20,27 +17,6 @@ const CHAT = 77;
 beforeEach(() => {
   getDb().prepare("DELETE FROM chat_configs WHERE chat_id = ?").run(CHAT);
   getDb().prepare("DELETE FROM chat_thread_prompts WHERE chat_id = ?").run(CHAT);
-  getDb().prepare("DELETE FROM chat_thread_agents WHERE chat_id = ?").run(CHAT);
-});
-
-describe("thread-scoped agents", () => {
-  test("keeps the selected agent isolated between topics", () => {
-    setChatThreadAgent(CHAT, undefined, "researcher");
-    setChatThreadAgent(CHAT, 10, "analyst");
-
-    expect(getChatThreadAgent(CHAT)).toBe("researcher");
-    expect(getChatThreadAgent(CHAT, 10)).toBe("analyst");
-    expect(getChatThreadAgent(CHAT, 20)).toBeUndefined();
-  });
-
-  test("resets only the current topic agent", () => {
-    chatConfigService.setAgent(CHAT, 10, "researcher");
-    chatConfigService.setAgent(CHAT, 20, "analyst");
-
-    expect(resetChatThreadAgent(CHAT, 20)).toBe(true);
-    expect(resetChatThreadAgent(CHAT, 20)).toBe(false);
-    expect(chatConfigService.getAgent(CHAT, 10)).toBe("researcher");
-  });
 });
 
 describe("getChatConfig", () => {

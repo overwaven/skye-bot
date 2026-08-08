@@ -12,6 +12,9 @@ import {
   UserAgentService,
   type UserAgentInput,
 } from "./userAgents.js";
+import { ChatAgentService, chatProfileId, isChatProfileId } from "./chatAgents.js";
+import { canManageChatAgents } from "./permissions.js";
+import { PERSONALITY_TEMPLATES } from "../llm/prompt.js";
 
 let serviceRef: AgentRuntimeService | null = null;
 
@@ -21,8 +24,8 @@ declare module "../../core/module.js" {
   }
 }
 
-function scopeLabel(threadId?: number): string {
-  return threadId == null ? "this chat" : "this topic";
+function isPrivate(tenant: TenantContext): boolean {
+  return tenant.chatType === "private";
 }
 
 function parseAgentForm(raw: string): UserAgentInput | undefined {
@@ -43,7 +46,7 @@ const editAgentHelp = [
   "<id> | <name> | <description> | <instructions>",
   "",
   "Example:",
-  "/edit_agent my_copywriter | Copywriter | Writes polished marketing copy | Ask about the audience and produce concise copy.",
+  "/edit_agent copywriter | Copywriter | Writes polished marketing copy | Ask about the audience and produce concise copy.",
 ].join("\n");
 
 const forceReply = (placeholder: string) => ({
@@ -57,18 +60,42 @@ export const agentRuntimeModule: SkyeModule = {
   configSchema: agentRuntimeConfigSchema,
   migrations,
   init(ctx) {
-    const userAgents = new UserAgentService(ctx.db, ctx.config.agent_runtime.max_user_agents);
+    const maxUser = ctx.config.agent_runtime.max_user_agents;
+    const maxChat = ctx.config.agent_runtime.max_chat_agents;
+    const userAgents = new UserAgentService(ctx.db, maxUser);
+    const chatAgents = new ChatAgentService(ctx.db, maxChat);
     const llm = ctx.services.get("llm");
     const agentModels = llm.models.filter((model) => model.provider !== "perplexity");
+    const admin = ctx.services.get("admin");
     const agentsPanelUrl = new URL(ctx.config.panel.webapp_url);
     agentsPanelUrl.searchParams.set("agents", "open");
     const agentStudioUrl = new URL(agentsPanelUrl);
     agentStudioUrl.searchParams.set("agents", "create");
+
+    const requireGroupManage = async (telegram: Context, tenant: TenantContext) => {
+      const allowed = await canManageChatAgents({
+        api: telegram.api,
+        admin,
+        chatId: tenant.chatId,
+        chatType: tenant.chatType,
+        userId: tenant.userId,
+      });
+      if (!allowed) {
+        await telegram.reply(
+          "Only Telegram group admins or bot administrators can manage agents in this chat.",
+          { reply_to_message_id: telegram.message?.message_id }
+        );
+      }
+      return allowed;
+    };
+
     const startAgentWizard = async (telegram: Context, tenant: TenantContext) => {
-      userAgents.startDraft(tenant.userId!, tenant.chatId, tenant.threadId);
+      if (!tenant.userId) return;
+      userAgents.startDraft(tenant.userId, tenant.chatId, tenant.threadId);
+      const kind = isPrivate(tenant) ? "personal" : "shared chat";
       await telegram.reply(
         [
-          "Let's create your personal agent.",
+          `Let's create a ${kind} agent.`,
           "",
           "Step 1 of 4 — What should I call it?",
           "For example: Research Assistant or Copywriter",
@@ -81,6 +108,7 @@ export const agentRuntimeModule: SkyeModule = {
         }
       );
     };
+
     const service = new AgentRuntimeService(
       {
         llm,
@@ -94,24 +122,38 @@ export const agentRuntimeModule: SkyeModule = {
         channel: ctx.services.has("channel") ? ctx.services.get("channel") : undefined,
         stickers: ctx.services.has("stickers") ? ctx.services.get("stickers") : undefined,
         userAgents,
+        chatAgents,
       },
       ctx.config.agent_runtime
     );
     serviceRef = service;
-    const chatConfig = ctx.services.get("chatConfig");
+
     return {
       service,
       panelRoutes: buildAgentRoutes(ctx, userAgents),
       commands: [
         {
           name: "agents",
-          description: "List available agent profiles",
+          description: "List agents for this chat",
           handler: async (telegram, tenant) => {
-            const profiles = service.profilesFor(tenant.userId);
-            const selected = service.activeProfile(tenant.chatId, tenant.threadId, tenant.userId);
-            const lines = profiles.map(
-              (profile) =>
-                `${profile.id === selected?.id ? "●" : "○"} ${profile.name} (${profile.id}) — ${profile.description}`
+            const library = service.libraryFor(tenant);
+            const selected = service.activeProfileFor(tenant);
+            const primary =
+              isPrivate(tenant) && tenant.userId
+                ? userAgents.getPrimary(tenant.userId)
+                : undefined;
+            const templates = service.templates();
+            const lines = library.map((profile) => {
+              const marks = [
+                profile.id === selected?.id ? "●" : "○",
+                primary && profile.id === primary ? "★" : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+              return `${marks} ${profile.name} (${profile.id}) — ${profile.description}`;
+            });
+            const templateLines = templates.map(
+              (profile) => `◇ ${profile.name} (${profile.id}) — template`
             );
             const options =
               telegram.chat?.type === "private"
@@ -125,11 +167,21 @@ export const agentRuntimeModule: SkyeModule = {
                 : { reply_to_message_id: telegram.message?.message_id };
             await telegram.reply(
               [
-                `Active for ${scopeLabel(tenant.threadId)}: ${selected?.name ?? "default Skye"}`,
+                `Active: ${selected?.name ?? "Default Skye"}`,
+                ...(primary
+                  ? [`Primary: ${userAgents.get(tenant.userId!, primary)?.name ?? primary}`]
+                  : isPrivate(tenant)
+                    ? ["Primary: Default Skye"]
+                    : []),
                 "",
-                ...(lines.length > 0 ? lines : ["No custom agent profiles are configured."]),
+                ...(lines.length > 0 ? lines : ["No agents in this library yet."]),
+                ...(templateLines.length > 0
+                  ? ["", "Templates (install with /agent <id>):", ...templateLines]
+                  : []),
                 "",
-                "Switch with /agent <id>, or use /agent default.",
+                isPrivate(tenant)
+                  ? "Switch with /agent <id>. Set primary with /agent primary <id>. Reset override with /agent default."
+                  : "Admins: switch with /agent <id>, or /agent default for built-in Skye.",
               ].join("\n"),
               options
             );
@@ -137,49 +189,140 @@ export const agentRuntimeModule: SkyeModule = {
         },
         {
           name: "agent",
-          description: "Switch agent for this chat or topic",
+          description: "Switch or set the active agent",
           handler: async (telegram, tenant) => {
             const requested = telegram.match?.toString().trim() ?? "";
             if (!requested) {
-              const selected = service.activeProfile(tenant.chatId, tenant.threadId, tenant.userId);
+              const selected = service.activeProfileFor(tenant);
               await telegram.reply(
-                `Active agent for ${scopeLabel(tenant.threadId)}: ${selected?.name ?? "default Skye"}. Use /agents to see profiles.`,
+                `Active agent: ${selected?.name ?? "Default Skye"}. Use /agents to see profiles.`,
                 { reply_to_message_id: telegram.message?.message_id }
               );
               return;
             }
-            if (["default", "skye", "reset"].includes(requested.toLowerCase())) {
-              if (tenant.userId) {
-                userAgents.resetSelection(tenant.userId, tenant.chatId, tenant.threadId);
+
+            const parts = requested.split(/\s+/);
+            const head = parts[0]!.toLowerCase();
+
+            if (head === "primary") {
+              if (!isPrivate(tenant) || !tenant.userId) {
+                await telegram.reply("Primary agents are only available in private chats.", {
+                  reply_to_message_id: telegram.message?.message_id,
+                });
+                return;
               }
-              chatConfig.resetAgent(tenant.chatId, tenant.threadId);
-              await telegram.reply(`Switched ${scopeLabel(tenant.threadId)} to default Skye.`, {
+              const target = parts.slice(1).join(" ").trim();
+              if (!target || ["default", "skye", "reset", "clear"].includes(target.toLowerCase())) {
+                userAgents.setPrimary(tenant.userId, null);
+                await telegram.reply("Cleared your primary agent. Default Skye is the fallback.", {
+                  reply_to_message_id: telegram.message?.message_id,
+                });
+                return;
+              }
+              const profile = service.profile(target, tenant);
+              if (!profile || !isPersonalProfileId(profile.id)) {
+                await telegram.reply(
+                  `Unknown personal agent "${target}". Create one first, or use /agents.`,
+                  { reply_to_message_id: telegram.message?.message_id }
+                );
+                return;
+              }
+              userAgents.setPrimary(tenant.userId, profile.id);
+              await telegram.reply(`Primary agent set to ${profile.name}.`, {
                 reply_to_message_id: telegram.message?.message_id,
               });
               return;
             }
-            const profile = service.profile(requested, tenant.userId);
+
+            if (["default", "skye", "reset"].includes(head)) {
+              if (isPrivate(tenant)) {
+                if (tenant.userId) {
+                  userAgents.resetSelection(tenant.userId, tenant.chatId, tenant.threadId);
+                }
+                const primary = tenant.userId ? userAgents.getPrimary(tenant.userId) : undefined;
+                await telegram.reply(
+                  primary
+                    ? `Cleared this chat override. Falling back to your primary agent.`
+                    : `Switched to Default Skye.`,
+                  { reply_to_message_id: telegram.message?.message_id }
+                );
+                return;
+              }
+              if (!(await requireGroupManage(telegram, tenant))) return;
+              chatAgents.resetSelection(tenant.chatId);
+              await telegram.reply("Switched this group to Default Skye.", {
+                reply_to_message_id: telegram.message?.message_id,
+              });
+              return;
+            }
+
+            if (!isPrivate(tenant) && !(await requireGroupManage(telegram, tenant))) return;
+
+            let profile = service.profile(requested, tenant);
+            const template = service.templates().find((item) => item.id === requested);
+            const personality = PERSONALITY_TEMPLATES.find(
+              (item) => item.id === requested || item.id === requested.replace(/\./g, "_")
+            );
+
+            if (!profile && (template || personality)) {
+              const source = template ?? {
+                id: personality!.id,
+                name: personality!.name,
+                description: personality!.description,
+                instructions: personality!.instructions,
+                enabled: true,
+              };
+              if (isPrivate(tenant)) {
+                if (!tenant.userId) return;
+                const agent = userAgents.installFromTemplate(tenant.userId, source, {
+                  setSelection: { chatId: tenant.chatId, threadId: tenant.threadId },
+                });
+                profile = {
+                  id: personalProfileId(agent.id),
+                  name: agent.name,
+                  description: agent.description,
+                  instructions: agent.instructions,
+                  enabled: true,
+                  ...(agent.modelId ? { model_id: agent.modelId } : {}),
+                };
+              } else {
+                const agent = chatAgents.installFromTemplate(tenant.chatId, source);
+                profile = {
+                  id: chatProfileId(agent.id),
+                  name: agent.name,
+                  description: agent.description,
+                  instructions: agent.instructions,
+                  enabled: true,
+                  ...(agent.modelId ? { model_id: agent.modelId } : {}),
+                };
+              }
+            }
+
             if (!profile) {
               await telegram.reply(`Unknown agent "${requested}". Use /agents to see profiles.`, {
                 reply_to_message_id: telegram.message?.message_id,
               });
               return;
             }
-            if (isPersonalProfileId(profile.id)) {
-              if (!tenant.userId) {
-                await telegram.reply("Personal agents require a Telegram user account.", {
+
+            if (isPrivate(tenant)) {
+              if (!isPersonalProfileId(profile.id) || !tenant.userId) {
+                await telegram.reply("Personal agents only in private chats.", {
                   reply_to_message_id: telegram.message?.message_id,
                 });
                 return;
               }
               userAgents.setSelection(tenant.userId, tenant.chatId, tenant.threadId, profile.id);
             } else {
-              if (tenant.userId) {
-                userAgents.resetSelection(tenant.userId, tenant.chatId, tenant.threadId);
+              if (!isChatProfileId(profile.id)) {
+                await telegram.reply("Only shared chat agents can be activated in groups.", {
+                  reply_to_message_id: telegram.message?.message_id,
+                });
+                return;
               }
-              chatConfig.setAgent(tenant.chatId, tenant.threadId, profile.id);
+              chatAgents.setSelection(tenant.chatId, profile.id);
             }
-            await telegram.reply(`Switched ${scopeLabel(tenant.threadId)} to ${profile.name}.`, {
+            await telegram.reply(`Switched to ${profile.name}.`, {
               reply_to_message_id: telegram.message?.message_id,
             });
           },
@@ -189,18 +332,29 @@ export const agentRuntimeModule: SkyeModule = {
           description: "List your personal agents",
           handler: async (telegram, tenant) => {
             if (!tenant.userId) return;
+            if (!isPrivate(tenant)) {
+              await telegram.reply(
+                "Personal agents are for private chats. In groups, use shared /agents.",
+                { reply_to_message_id: telegram.message?.message_id }
+              );
+              return;
+            }
             const agents = userAgents.list(tenant.userId);
-            const active = userAgents.getSelection(tenant.userId, tenant.chatId, tenant.threadId);
+            const active = service.activeProfileFor(tenant)?.id;
+            const primary = userAgents.getPrimary(tenant.userId);
             const lines = agents.map((agent) => {
               const id = personalProfileId(agent.id);
-              return `${id === active ? "●" : "○"} ${agent.name} (${id}) — ${agent.description}`;
+              const marks = [id === active ? "●" : "○", primary === id ? "★" : ""]
+                .filter(Boolean)
+                .join(" ");
+              return `${marks} ${agent.name} (${id}) — ${agent.description}`;
             });
             await telegram.reply(
               [
                 ...(lines.length > 0 ? lines : ["You have no personal agents yet."]),
                 "",
-                `Limit: ${agents.length}/${ctx.config.agent_runtime.max_user_agents}`,
-                "Create one with /create_agent.",
+                `Limit: ${agents.length}/${maxUser}`,
+                "● active · ★ primary · Create with /create_agent.",
               ].join("\n"),
               { reply_to_message_id: telegram.message?.message_id }
             );
@@ -208,18 +362,18 @@ export const agentRuntimeModule: SkyeModule = {
         },
         {
           name: "create_agent",
-          description: "Create a private personal agent",
+          description: "Create an agent for this chat",
           handler: async (telegram, tenant) => {
             if (!tenant.userId) return;
-            const count = userAgents.list(tenant.userId).length;
-            if (count >= ctx.config.agent_runtime.max_user_agents) {
-              await telegram.reply(
-                `You already have the maximum of ${ctx.config.agent_runtime.max_user_agents} personal agents. Delete one with /delete_agent first.`,
-                { reply_to_message_id: telegram.message?.message_id }
-              );
-              return;
-            }
-            if (telegram.chat?.type === "private") {
+            if (isPrivate(tenant)) {
+              const count = userAgents.list(tenant.userId).length;
+              if (count >= maxUser) {
+                await telegram.reply(
+                  `You already have the maximum of ${maxUser} personal agents. Delete one with /delete_agent first.`,
+                  { reply_to_message_id: telegram.message?.message_id }
+                );
+                return;
+              }
               await telegram.reply("Create and manage personal agents in the Mini App.", {
                 reply_to_message_id: telegram.message?.message_id,
                 reply_markup: new InlineKeyboard()
@@ -229,12 +383,20 @@ export const agentRuntimeModule: SkyeModule = {
               });
               return;
             }
+            if (!(await requireGroupManage(telegram, tenant))) return;
+            if (chatAgents.list(tenant.chatId).length >= maxChat) {
+              await telegram.reply(
+                `This chat already has the maximum of ${maxChat} agents. Delete one with /delete_agent first.`,
+                { reply_to_message_id: telegram.message?.message_id }
+              );
+              return;
+            }
             await startAgentWizard(telegram, tenant);
           },
         },
         {
           name: "cancel_agent",
-          description: "Cancel personal agent creation",
+          description: "Cancel agent creation",
           handler: async (telegram, tenant) => {
             if (!tenant.userId) return;
             const cancelled = userAgents.cancelDraft(tenant.userId, tenant.chatId, tenant.threadId);
@@ -246,9 +408,10 @@ export const agentRuntimeModule: SkyeModule = {
         },
         {
           name: "edit_agent",
-          description: "Edit one of your personal agents",
+          description: "Edit an agent in this chat",
           handler: async (telegram, tenant) => {
             if (!tenant.userId) return;
+            if (!isPrivate(tenant) && !(await requireGroupManage(telegram, tenant))) return;
             const form = parseAgentForm(telegram.match?.toString().trim() ?? "");
             if (!form) {
               await telegram.reply(editAgentHelp, {
@@ -257,17 +420,31 @@ export const agentRuntimeModule: SkyeModule = {
               return;
             }
             try {
-              const existing = userAgents.get(tenant.userId, form.id);
-              const agent = userAgents.update(tenant.userId, form.id, {
-                name: form.name,
-                description: form.description,
-                instructions: form.instructions,
-                ...(existing?.modelId ? { modelId: existing.modelId } : {}),
-              });
-              await telegram.reply(
-                `Updated private agent ${agent.name} (${personalProfileId(agent.id)}).`,
-                { reply_to_message_id: telegram.message?.message_id }
-              );
+              if (isPrivate(tenant)) {
+                const existing = userAgents.get(tenant.userId, form.id);
+                const agent = userAgents.update(tenant.userId, form.id, {
+                  name: form.name,
+                  description: form.description,
+                  instructions: form.instructions,
+                  ...(existing?.modelId ? { modelId: existing.modelId } : {}),
+                });
+                await telegram.reply(
+                  `Updated personal agent ${agent.name} (${personalProfileId(agent.id)}).`,
+                  { reply_to_message_id: telegram.message?.message_id }
+                );
+              } else {
+                const existing = chatAgents.get(tenant.chatId, form.id);
+                const agent = chatAgents.update(tenant.chatId, form.id, {
+                  name: form.name,
+                  description: form.description,
+                  instructions: form.instructions,
+                  ...(existing?.modelId ? { modelId: existing.modelId } : {}),
+                });
+                await telegram.reply(
+                  `Updated chat agent ${agent.name} (${chatProfileId(agent.id)}).`,
+                  { reply_to_message_id: telegram.message?.message_id }
+                );
+              }
             } catch (error) {
               await telegram.reply(`Could not update agent: ${errorMessage(error)}`, {
                 reply_to_message_id: telegram.message?.message_id,
@@ -277,23 +454,34 @@ export const agentRuntimeModule: SkyeModule = {
         },
         {
           name: "delete_agent",
-          description: "Delete one of your personal agents",
+          description: "Delete an agent in this chat",
           handler: async (telegram, tenant) => {
             if (!tenant.userId) return;
+            if (!isPrivate(tenant) && !(await requireGroupManage(telegram, tenant))) return;
             const id = telegram.match?.toString().trim() ?? "";
             if (!id) {
-              await telegram.reply("Add the agent id, for example: /delete_agent my_copywriter", {
+              await telegram.reply("Add the agent id, for example: /delete_agent copywriter", {
                 reply_to_message_id: telegram.message?.message_id,
               });
               return;
             }
-            const deleted = userAgents.delete(tenant.userId, id);
-            await telegram.reply(
-              deleted
-                ? `Deleted private agent ${personalProfileId(id)}.`
-                : `Personal agent ${personalProfileId(id)} does not exist.`,
-              { reply_to_message_id: telegram.message?.message_id }
-            );
+            if (isPrivate(tenant)) {
+              const deleted = userAgents.delete(tenant.userId, id);
+              await telegram.reply(
+                deleted
+                  ? `Deleted personal agent ${personalProfileId(id)}.`
+                  : `Personal agent ${personalProfileId(id)} does not exist.`,
+                { reply_to_message_id: telegram.message?.message_id }
+              );
+            } else {
+              const deleted = chatAgents.delete(tenant.chatId, id);
+              await telegram.reply(
+                deleted
+                  ? `Deleted chat agent ${chatProfileId(id)}.`
+                  : `Chat agent ${chatProfileId(id)} does not exist.`,
+                { reply_to_message_id: telegram.message?.message_id }
+              );
+            }
           },
         },
       ],
@@ -324,7 +512,7 @@ export const agentRuntimeModule: SkyeModule = {
                   `Great — ${text}.`,
                   "",
                   "Step 2 of 4 — What is this agent good at?",
-                  "Write one short description. This helps Skye decide when to delegate work to it.",
+                  "Write one short description.",
                 ].join("\n"),
                 { reply_markup: forceReply("What does this agent specialize in?") }
               );
@@ -347,7 +535,7 @@ export const agentRuntimeModule: SkyeModule = {
                 [
                   "Step 3 of 4 — How should it work?",
                   "",
-                  "Describe its role, tone, rules, and what a good answer should look like. You can write several paragraphs.",
+                  "Describe its role, tone, rules, and what a good answer should look like.",
                 ].join("\n"),
                 { reply_markup: forceReply("Detailed instructions") }
               );
@@ -377,7 +565,7 @@ export const agentRuntimeModule: SkyeModule = {
                 [
                   "Step 4 of 4 — Choose a model",
                   "",
-                  "Use the current chat model, or pin this agent to a specific model. Token usage is charged at that model's multiplier.",
+                  "Use the current chat model, or pin this agent to a specific model.",
                 ].join("\n"),
                 { reply_markup: keyboard }
               );
@@ -395,8 +583,14 @@ export const agentRuntimeModule: SkyeModule = {
             if (!action?.startsWith("agent:")) return next();
             if (!tenant.userId) return;
             if (action === "agent:create:chat") {
-              const count = userAgents.list(tenant.userId).length;
-              if (count >= ctx.config.agent_runtime.max_user_agents) {
+              if (!isPrivate(tenant) && !(await requireGroupManage(telegram, tenant))) {
+                await telegram.answerCallbackQuery({ text: "Not allowed.", show_alert: true });
+                return;
+              }
+              const atLimit = isPrivate(tenant)
+                ? userAgents.list(tenant.userId).length >= maxUser
+                : chatAgents.list(tenant.chatId).length >= maxChat;
+              if (atLimit) {
                 await telegram.answerCallbackQuery({
                   text: "Agent limit reached.",
                   show_alert: true,
@@ -445,7 +639,9 @@ export const agentRuntimeModule: SkyeModule = {
               await telegram.answerCallbackQuery({ text: "Model selected" });
               await telegram.reply(
                 [
-                  "Ready to create this private agent:",
+                  isPrivate(tenant)
+                    ? "Ready to create this personal agent:"
+                    : "Ready to create this shared chat agent:",
                   "",
                   `Name: ${completed.name}`,
                   `Specialty: ${completed.description}`,
@@ -466,20 +662,40 @@ export const agentRuntimeModule: SkyeModule = {
               await telegram.answerCallbackQuery({ text: "Complete the previous step first." });
               return;
             }
+            if (!isPrivate(tenant) && !(await requireGroupManage(telegram, tenant))) {
+              await telegram.answerCallbackQuery({ text: "Not allowed.", show_alert: true });
+              return;
+            }
             try {
-              const agent = userAgents.create(tenant.userId, {
-                id: userAgents.nextId(tenant.userId, draft.name!),
-                name: draft.name!,
-                description: draft.description!,
-                instructions: draft.instructions!,
-                ...(draft.modelId ? { modelId: draft.modelId } : {}),
-              });
-              userAgents.setSelection(tenant.userId, tenant.chatId, tenant.threadId, agent.id);
-              userAgents.cancelDraft(tenant.userId, tenant.chatId, tenant.threadId);
-              await telegram.answerCallbackQuery({ text: "Agent created" });
-              await telegram.reply(
-                `Created and selected ${agent.name} (${personalProfileId(agent.id)}) for ${scopeLabel(tenant.threadId)}.`
-              );
+              if (isPrivate(tenant)) {
+                const agent = userAgents.create(tenant.userId, {
+                  id: userAgents.nextId(tenant.userId, draft.name!),
+                  name: draft.name!,
+                  description: draft.description!,
+                  instructions: draft.instructions!,
+                  ...(draft.modelId ? { modelId: draft.modelId } : {}),
+                });
+                userAgents.setSelection(tenant.userId, tenant.chatId, tenant.threadId, agent.id);
+                userAgents.cancelDraft(tenant.userId, tenant.chatId, tenant.threadId);
+                await telegram.answerCallbackQuery({ text: "Agent created" });
+                await telegram.reply(
+                  `Created and selected ${agent.name} (${personalProfileId(agent.id)}).`
+                );
+              } else {
+                const agent = chatAgents.create(tenant.chatId, {
+                  id: chatAgents.nextId(tenant.chatId, draft.name!),
+                  name: draft.name!,
+                  description: draft.description!,
+                  instructions: draft.instructions!,
+                  ...(draft.modelId ? { modelId: draft.modelId } : {}),
+                });
+                chatAgents.setSelection(tenant.chatId, agent.id);
+                userAgents.cancelDraft(tenant.userId, tenant.chatId, tenant.threadId);
+                await telegram.answerCallbackQuery({ text: "Agent created" });
+                await telegram.reply(
+                  `Created and activated ${agent.name} (${chatProfileId(agent.id)}) for this group.`
+                );
+              }
             } catch (error) {
               await telegram.answerCallbackQuery({
                 text: errorMessage(error).slice(0, 180),
@@ -501,3 +717,4 @@ export type { AgentRuntime, AgentRunRequest, AgentRuntimeDeps } from "./types.js
 export { OpenAIAgentsRuntime } from "./openai.js";
 export { AgentRuntimeService } from "./service.js";
 export { UserAgentService } from "./userAgents.js";
+export { ChatAgentService } from "./chatAgents.js";

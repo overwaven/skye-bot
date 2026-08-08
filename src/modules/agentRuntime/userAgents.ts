@@ -251,12 +251,81 @@ export class UserAgentService {
       this.db
         .prepare("DELETE FROM user_thread_agents WHERE owner_user_id = ? AND agent_id = ?")
         .run(ownerUserId, storedId);
-      return (
+      const deleted =
         this.db
           .prepare("DELETE FROM user_agents WHERE owner_user_id = ? AND id = ?")
-          .run(ownerUserId, storedId).changes > 0
-      );
+          .run(ownerUserId, storedId).changes > 0;
+      if (deleted) {
+        this.db
+          .prepare(
+            `UPDATE user_configs SET primary_agent_id = NULL
+             WHERE user_id = ? AND primary_agent_id = ?`
+          )
+          .run(ownerUserId, storedId);
+      }
+      return deleted;
     })();
+  }
+
+  getPrimary(ownerUserId: number): string | undefined {
+    const row = this.db
+      .prepare<[number], { primaryAgentId: string | null }>(
+        `SELECT primary_agent_id AS primaryAgentId FROM user_configs WHERE user_id = ?`
+      )
+      .get(ownerUserId);
+    if (!row?.primaryAgentId) return undefined;
+    return this.get(ownerUserId, row.primaryAgentId)
+      ? personalProfileId(row.primaryAgentId)
+      : undefined;
+  }
+
+  setPrimary(ownerUserId: number, id: string | null): void {
+    if (id === null) {
+      this.db
+        .prepare("UPDATE user_configs SET primary_agent_id = NULL WHERE user_id = ?")
+        .run(ownerUserId);
+      return;
+    }
+    const storedId = normalizeId(id);
+    if (!this.get(ownerUserId, storedId)) {
+      throw new Error(`Personal agent "${personalProfileId(storedId)}" does not exist.`);
+    }
+    this.db
+      .prepare(
+        `INSERT INTO user_configs (user_id, primary_agent_id, personality)
+         VALUES (?, ?, 'skye')
+         ON CONFLICT(user_id) DO UPDATE SET primary_agent_id = excluded.primary_agent_id`
+      )
+      .run(ownerUserId, storedId);
+  }
+
+  /** Fork a template into a personal agent (does not auto-select unless options say so). */
+  installFromTemplate(
+    ownerUserId: number,
+    template: AgentProfile,
+    options?: { setPrimary?: boolean; setSelection?: { chatId: number; threadId?: number } }
+  ): UserAgentRecord {
+    const baseId = normalizeId(template.id).slice(0, 32);
+    let agent = this.get(ownerUserId, baseId);
+    if (!agent) {
+      agent = this.create(ownerUserId, {
+        id: baseId,
+        name: template.name,
+        description: template.description,
+        instructions: template.instructions,
+        ...(template.model_id ? { modelId: template.model_id } : {}),
+      });
+    }
+    if (options?.setPrimary) this.setPrimary(ownerUserId, agent.id);
+    if (options?.setSelection) {
+      this.setSelection(
+        ownerUserId,
+        options.setSelection.chatId,
+        options.setSelection.threadId,
+        agent.id
+      );
+    }
+    return agent;
   }
 
   getSelection(ownerUserId: number, chatId: number, threadId?: number): string | undefined {

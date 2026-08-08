@@ -15,6 +15,9 @@ import { buildSystemPrompt } from "../llm/prompt.js";
 import { parseTextEncodedToolCall, safeJsonParse, type ToolCallRecord } from "./helpers.js";
 import { log } from "../../utils/log.js";
 import { unwrapTextEnvelope } from "../../utils/markdown.js";
+import type { AgentProfile } from "../agentRuntime/config.js";
+import type { UserAgentService } from "../agentRuntime/userAgents.js";
+import type { ChatAgentService } from "../agentRuntime/chatAgents.js";
 
 export interface ChatLoopDeps {
   llm: LlmClient;
@@ -27,6 +30,8 @@ export interface ChatLoopDeps {
   reminders?: RemindersService;
   channel?: ChannelService;
   stickers?: StickersService;
+  userAgents?: UserAgentService;
+  chatAgents?: ChatAgentService;
   builtinTools: ToolDefinition[];
   allowConnectorTools?: boolean;
   hasReferenceImages?: boolean;
@@ -38,6 +43,7 @@ export interface ChatLoopDeps {
   /** Bot owner info (name + Telegram handle) to weight in the system prompt. */
   owner?: { name: string; tag: string };
   acceptEmptyFinal?: () => boolean;
+  resolveActiveAgent?: (tenant: TenantContext) => AgentProfile | undefined;
 }
 
 export const MAX_TOOL_ITERATIONS = 20;
@@ -69,9 +75,13 @@ export async function runChatLoop(
   const connectorToolNames = connectorTools.map((t) => t.name);
   const tk = threadKey(tenant);
 
-  const userCfg = tenant.userId ? deps.userConfig.get(tenant.userId) : undefined;
-  const chatPrompt = deps.chatConfig.getPrompt(tenant.chatId, tenant.threadId);
-  const modelEntry = deps.llm.resolveModel(deps.modelId);
+  const chatAddendum = deps.chatConfig.getPrompt(tenant.chatId, tenant.threadId);
+  const activeAgent = deps.resolveActiveAgent?.(tenant);
+  const modelEntry = deps.llm.resolveModel(
+    activeAgent?.model_id && deps.llm.models.some((m) => m.id === activeAgent.model_id)
+      ? activeAgent.model_id
+      : deps.modelId
+  );
   const builtinTools = modelEntry.builtinTools;
   const hasBuiltinSandbox = builtinTools?.includes("sandbox") ?? false;
 
@@ -98,21 +108,21 @@ export async function runChatLoop(
     memories,
     chatContext,
     connectorToolNames,
-    userCfg?.systemPrompt,
     deps.sandbox?.isEnabled(),
     deps.hasReferenceImages,
     !!deps.reminders,
-    modelEntry.name,
+    activeAgent?.name ?? modelEntry.name,
     builtinTools,
     deps.owner,
     !!deps.channel,
-    userCfg?.personality,
-    chatPrompt,
+    activeAgent?.instructions,
+    chatAddendum,
     chatStickers.map((s) => ({
       id: s.id,
       description: s.description,
       ...(s.emoji ? { emoji: s.emoji } : {}),
-    }))
+    })),
+    activeAgent?.name
   );
 
   // Log the request summary (last user item text + attachments).

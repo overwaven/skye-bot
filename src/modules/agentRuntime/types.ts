@@ -13,6 +13,7 @@ import type { TenantContext } from "../../core/tenant.js";
 import type { ToolDefinition } from "../../core/module.js";
 import type { ToolCallRecord } from "../telegram/helpers.js";
 import type { UserAgentService } from "./userAgents.js";
+import type { ChatAgentService } from "./chatAgents.js";
 
 export interface AgentRuntimeDeps {
   llm: LlmClient;
@@ -26,6 +27,7 @@ export interface AgentRuntimeDeps {
   channel?: ChannelService;
   stickers?: StickersService;
   userAgents: UserAgentService;
+  chatAgents: ChatAgentService;
 }
 
 export interface AgentRunRequest {

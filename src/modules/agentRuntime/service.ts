@@ -3,37 +3,12 @@ import type { AgentRunRequest, AgentRuntime, AgentRuntimeDeps } from "./types.js
 import { OpenAIAgentsRuntime } from "./openai.js";
 import { runChatLoop } from "../telegram/chat.js";
 import { log } from "../../utils/log.js";
-
-class LegacyAgentRuntime implements AgentRuntime {
-  readonly engine = "legacy" as const;
-
-  constructor(private readonly deps: AgentRuntimeDeps) {}
-
-  run(request: AgentRunRequest): Promise<string> {
-    return runChatLoop(
-      {
-        ...this.deps,
-        builtinTools: request.builtinTools,
-        allowConnectorTools: request.allowConnectorTools,
-        hasReferenceImages: request.hasReferenceImages,
-        modelId: request.modelId,
-        beforeRound: request.beforeRound,
-        onUsage: request.onUsage,
-        owner: request.owner,
-        acceptEmptyFinal: request.acceptEmptyFinal,
-      },
-      request.tenant,
-      request.input,
-      request.onChunk,
-      request.onToolCalls,
-      request.signal
-    );
-  }
-}
+import { isChatProfileId } from "./chatAgents.js";
+import { isPersonalProfileId } from "./userAgents.js";
+import type { TenantContext } from "../../core/tenant.js";
 
 export class AgentRuntimeService implements AgentRuntime {
   readonly engine: AgentRuntime["engine"];
-  private readonly legacy: LegacyAgentRuntime;
   private readonly openaiAgents: OpenAIAgentsRuntime;
 
   constructor(
@@ -41,7 +16,6 @@ export class AgentRuntimeService implements AgentRuntime {
     private readonly config: AgentRuntimeConfig
   ) {
     this.engine = config.engine;
-    this.legacy = new LegacyAgentRuntime(deps);
     this.openaiAgents = new OpenAIAgentsRuntime(deps, config);
   }
 
@@ -56,26 +30,89 @@ export class AgentRuntimeService implements AgentRuntime {
         "Using legacy agent runtime for optional Perplexity model"
       );
     }
-    return this.legacy.run(request);
+    return runChatLoop(
+      {
+        ...this.deps,
+        builtinTools: request.builtinTools,
+        allowConnectorTools: request.allowConnectorTools,
+        hasReferenceImages: request.hasReferenceImages,
+        modelId: request.modelId,
+        beforeRound: request.beforeRound,
+        onUsage: request.onUsage,
+        owner: request.owner,
+        acceptEmptyFinal: request.acceptEmptyFinal,
+        resolveActiveAgent: (tenant) => this.activeProfileFor(tenant),
+      },
+      request.tenant,
+      request.input,
+      request.onChunk,
+      request.onToolCalls,
+      request.signal
+    );
   }
 
-  profiles(): AgentProfile[] {
+  /** YAML templates only (not activatable directly). */
+  templates(): AgentProfile[] {
     return this.config.agents.filter((profile) => profile.enabled);
   }
 
+  /** Editable profiles available in this tenant context. */
+  libraryFor(tenant: Pick<TenantContext, "chatId" | "chatType" | "userId">): AgentProfile[] {
+    if (tenant.chatType === "private") {
+      return tenant.userId ? this.deps.userAgents.profiles(tenant.userId) : [];
+    }
+    return this.deps.chatAgents.profiles(tenant.chatId);
+  }
+
+  profiles(): AgentProfile[] {
+    return this.templates();
+  }
+
   profilesFor(userId?: number): AgentProfile[] {
-    return [...this.profiles(), ...(userId ? this.deps.userAgents.profiles(userId) : [])];
+    return [...this.templates(), ...(userId ? this.deps.userAgents.profiles(userId) : [])];
   }
 
-  profile(id: string | undefined, userId?: number): AgentProfile | undefined {
-    return id ? this.profilesFor(userId).find((profile) => profile.id === id) : undefined;
+  profile(
+    id: string | undefined,
+    tenant?: Pick<TenantContext, "chatId" | "chatType" | "userId">
+  ): AgentProfile | undefined {
+    if (!id) return undefined;
+    if (tenant) {
+      const fromLibrary = this.libraryFor(tenant).find((profile) => profile.id === id);
+      if (fromLibrary) return fromLibrary;
+    }
+    if (isPersonalProfileId(id) && tenant?.userId) {
+      return this.deps.userAgents.profiles(tenant.userId).find((profile) => profile.id === id);
+    }
+    if (isChatProfileId(id) && tenant) {
+      return this.deps.chatAgents.profiles(tenant.chatId).find((profile) => profile.id === id);
+    }
+    return this.templates().find((profile) => profile.id === id);
   }
 
+  activeProfileFor(tenant: TenantContext): AgentProfile | undefined {
+    if (tenant.chatType === "private") {
+      const override =
+        tenant.userId != null
+          ? this.deps.userAgents.getSelection(tenant.userId, tenant.chatId, tenant.threadId)
+          : undefined;
+      if (override) return this.profile(override, tenant);
+      const primary =
+        tenant.userId != null ? this.deps.userAgents.getPrimary(tenant.userId) : undefined;
+      return this.profile(primary, tenant);
+    }
+    return this.profile(this.deps.chatAgents.getSelection(tenant.chatId), tenant);
+  }
+
+  /** @deprecated Prefer activeProfileFor(tenant). */
   activeProfile(chatId: number, threadId?: number, userId?: number): AgentProfile | undefined {
-    const personalId = userId
-      ? this.deps.userAgents.getSelection(userId, chatId, threadId)
-      : undefined;
-    return this.profile(personalId ?? this.deps.chatConfig.getAgent(chatId, threadId), userId);
+    const isPrivate = userId != null && chatId === userId;
+    return this.activeProfileFor({
+      chatId,
+      chatType: isPrivate ? "private" : "supergroup",
+      threadId,
+      userId,
+    });
   }
 
   async close(): Promise<void> {
