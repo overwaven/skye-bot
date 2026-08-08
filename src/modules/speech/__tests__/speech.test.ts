@@ -303,8 +303,8 @@ describe("expressive speech", () => {
   });
 
   it("leaves xAI transcript unchanged and never speaks style/scene notes", () => {
-    expect(buildXaiTtsText("Hello", {})).toBe("Hello");
-    expect(buildXaiTtsText("Hello", { scene: "Quiet room", style: "soft" })).toBe("Hello");
+    expect(buildXaiTtsText("Hello")).toBe("Hello");
+    expect(buildXaiTtsText("Quiet room soft\n\nHello")).toBe("Quiet room soft\n\nHello");
   });
 
   it("xAI TTS posts voice_id/language and transcodes to OGG Opus", async () => {

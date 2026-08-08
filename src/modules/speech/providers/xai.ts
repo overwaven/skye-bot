@@ -141,7 +141,7 @@ export class XaiSpeechProvider implements SpeechProvider {
 
     // xAI only supports expression via inline tags inside `text`. Never prepend
     // style/scene notes — they would be spoken literally.
-    const spoken = buildXaiTtsText(text, options);
+    const spoken = buildXaiTtsText(text);
 
     try {
       const body: Record<string, unknown> = {
@@ -195,7 +195,7 @@ export class XaiSpeechProvider implements SpeechProvider {
   }
 }
 
-/** xAI speaks the text body verbatim; ignore style/scene so they are never vocalized. */
-export function buildXaiTtsText(transcript: string, _options: SpeechSynthesisOptions = {}): string {
+/** xAI speaks the text body verbatim; style/scene must never be vocalized. */
+export function buildXaiTtsText(transcript: string): string {
   return transcript;
 }
