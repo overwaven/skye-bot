@@ -6,6 +6,15 @@ export function cleanMd(text: string) {
 }
 
 const INTERNAL_METADATA_KEYS = new Set(["thought", "tools"]);
+/** Keys the send_voice tool accepts — models sometimes emit these as plain JSON text. */
+const VOICE_TOOL_PAYLOAD_KEYS = new Set(["text", "voice", "style", "scene"]);
+
+export interface VoiceToolPayload {
+  text: string;
+  voice?: string;
+  style?: string;
+  scene?: string;
+}
 
 function leadingJsonObjectEnd(text: string): number | undefined {
   if (text[0] !== "{") return undefined;
@@ -65,7 +74,46 @@ function stripInternalMetadataPrefix(text: string): string {
   return remainder;
 }
 
+/**
+ * Detect a leaked send_voice argument object (plain or fenced JSON).
+ * Models sometimes print tool args as the final answer instead of calling the tool.
+ */
+export function parseVoiceToolPayload(text: string): VoiceToolPayload | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1]?.trim() ?? trimmed;
+  if (fenced[0] !== "{") return null;
+
+  let value: unknown;
+  try {
+    value = JSON.parse(fenced);
+  } catch {
+    return null;
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length === 0 || keys.some((key) => !VOICE_TOOL_PAYLOAD_KEYS.has(key))) return null;
+  if (typeof record.text !== "string") return null;
+
+  const transcript = record.text.trim();
+  if (!transcript) return null;
+
+  const payload: VoiceToolPayload = { text: transcript };
+  for (const key of ["voice", "style", "scene"] as const) {
+    const raw = record[key];
+    if (typeof raw !== "string") continue;
+    const trimmedValue = raw.trim();
+    if (trimmedValue) payload[key] = trimmedValue;
+  }
+  return payload;
+}
+
 export function unwrapTextEnvelope(text: string): string {
+  const voicePayload = parseVoiceToolPayload(text);
+  if (voicePayload) return voicePayload.text;
+
   const trimmed = text.trim();
   const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i)?.[1] ?? trimmed;
 

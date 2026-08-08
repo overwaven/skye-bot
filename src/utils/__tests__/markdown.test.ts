@@ -1,5 +1,10 @@
 import { test, expect, describe } from "vitest";
-import { cleanMd, unwrapStreamingTextEnvelope, unwrapTextEnvelope } from "../markdown.js";
+import {
+  cleanMd,
+  parseVoiceToolPayload,
+  unwrapStreamingTextEnvelope,
+  unwrapTextEnvelope,
+} from "../markdown.js";
 
 describe("cleanMd", () => {
   test("keeps rich markdown emphasis", () => {
@@ -46,6 +51,14 @@ describe("unwrapTextEnvelope", () => {
     expect(unwrapTextEnvelope('```json\n{"text":"Hello there"}\n```')).toBe("Hello there");
   });
 
+  test("unwraps a leaked send_voice tool payload", () => {
+    expect(
+      unwrapTextEnvelope(
+        '{"text":"Привет","voice":"Aoede","style":"warm and bright","scene":"quiet studio"}'
+      )
+    ).toBe("Привет");
+  });
+
   test("preserves other JSON objects", () => {
     const json = '{"text":"Hello","language":"en"}';
     expect(unwrapTextEnvelope(json)).toBe(json);
@@ -65,6 +78,25 @@ describe("unwrapTextEnvelope", () => {
     const json = '{"thought":"A visible field","tools":[]}';
     expect(unwrapTextEnvelope(json)).toBe(json);
     expect(unwrapTextEnvelope('{"status":"ok"} Done')).toBe('{"status":"ok"} Done');
+  });
+});
+
+describe("parseVoiceToolPayload", () => {
+  test("parses send_voice-shaped JSON including optional directions", () => {
+    expect(
+      parseVoiceToolPayload(
+        '{"text":"Hello","voice":"eve","style":"soft","scene":"Quiet room"}'
+      )
+    ).toEqual({
+      text: "Hello",
+      voice: "eve",
+      style: "soft",
+      scene: "Quiet room",
+    });
+  });
+
+  test("rejects JSON with unrelated keys", () => {
+    expect(parseVoiceToolPayload('{"text":"Hello","language":"en"}')).toBeNull();
   });
 });
 

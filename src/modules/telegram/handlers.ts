@@ -14,6 +14,7 @@ import type { ChatConfigService } from "../chatConfig/service.js";
 import type { UserConfigService } from "../userConfig/service.js";
 import type { SpeechService } from "../speech/service.js";
 import { createSendVoiceTool, type PreparedVoiceMessage } from "../speech/tool.js";
+import type { SpeechSynthesisOptions } from "../speech/types.js";
 import { oggOpusDurationSeconds } from "../speech/transcode.js";
 import type { AuditService } from "../audit/service.js";
 import type { SandboxService } from "../sandbox/service.js";
@@ -62,7 +63,12 @@ import {
   toFileDataUrl,
   type ToolCallRecord,
 } from "./helpers.js";
-import { cleanMd, unwrapStreamingTextEnvelope, unwrapTextEnvelope } from "../../utils/markdown.js";
+import {
+  cleanMd,
+  parseVoiceToolPayload,
+  unwrapStreamingTextEnvelope,
+  unwrapTextEnvelope,
+} from "../../utils/markdown.js";
 import { log } from "../../utils/log.js";
 import { QueueTimeoutError, type TelegramReliabilityService } from "./reliability.js";
 
@@ -1494,7 +1500,16 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       if (!rawText && !hasPreparedMedia() && lastAttemptError) {
         throw lastAttemptError;
       }
-      const text = cleanMd(unwrapTextEnvelope(rawText));
+      // Recover when the model prints send_voice args as JSON instead of calling the tool.
+      const leakedVoice = parseVoiceToolPayload(rawText);
+      const text = cleanMd(leakedVoice ? leakedVoice.text : unwrapTextEnvelope(rawText));
+      const leakedSynthesisOptions: SpeechSynthesisOptions | undefined = leakedVoice
+        ? {
+            voice: leakedVoice.voice,
+            style: leakedVoice.style,
+            scene: leakedVoice.scene,
+          }
+        : undefined;
 
       if (!text && !hasPreparedMedia()) {
         await draft.delete();
@@ -1513,17 +1528,22 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         return;
       }
 
-      const shouldVoice = voiceReplyMode === "always" && deps.speech.isTtsAvailable();
+      const shouldVoice =
+        deps.speech.isTtsAvailable() &&
+        (voiceReplyMode === "always" || Boolean(leakedVoice));
       if (
         preparedVoiceMessages.length === 0 &&
         preparedStickers.length === 0 &&
         text &&
-        shouldVoice &&
-        deps.speech.isTtsAvailable()
+        shouldVoice
       ) {
         await ctx.replyWithChatAction("record_voice");
         void draft.send("", { kind: "voice", text: "Recording a voice response…" });
-        const audioBuffer = await deps.speech.synthesize(text, undefined, controller.signal);
+        const audioBuffer = await deps.speech.synthesize(
+          text,
+          leakedSynthesisOptions,
+          controller.signal
+        );
         const durationSeconds = audioBuffer ? oggOpusDurationSeconds(audioBuffer) : 0;
         if (audioBuffer && durationSeconds >= 0.1) {
           await draft.delete();

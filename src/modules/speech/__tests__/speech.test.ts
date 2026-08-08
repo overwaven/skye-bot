@@ -302,11 +302,9 @@ describe("expressive speech", () => {
     expect(buildGeminiTtsInput("Привет", {})).toBe("Привет");
   });
 
-  it("builds xAI TTS text with optional scene/style notes", () => {
+  it("leaves xAI transcript unchanged and never speaks style/scene notes", () => {
     expect(buildXaiTtsText("Hello", {})).toBe("Hello");
-    expect(buildXaiTtsText("Hello", { scene: "Quiet room", style: "soft" })).toBe(
-      "Quiet room soft\n\nHello"
-    );
+    expect(buildXaiTtsText("Hello", { scene: "Quiet room", style: "soft" })).toBe("Hello");
   });
 
   it("xAI TTS posts voice_id/language and transcodes to OGG Opus", async () => {
@@ -562,5 +560,46 @@ describe("expressive speech", () => {
     await expect(tool.execute({ text: "Again" }, {} as never)).resolves.toContain(
       "already prepared"
     );
+  });
+
+  it("unwraps a nested send_voice JSON blob inside the text argument", async () => {
+    const calls: { text: string; options?: SpeechSynthesisOptions }[] = [];
+    const provider: SpeechProvider = {
+      isSttAvailable: () => false,
+      isTtsAvailable: () => true,
+      recognize: async () => null,
+      synthesize: async (text, options) => {
+        calls.push({ text, options });
+        return fakeOggDuration(1);
+      },
+      getTtsCapabilities: () => ({
+        defaultVoice: "Aoede",
+        voices: ["Aoede", "Sulafat"],
+        expressive: true,
+      }),
+    };
+    const tool = createSendVoiceTool({
+      speech: new SpeechService(provider),
+      mode: "auto",
+      onPrepared: () => {},
+    });
+
+    await tool.execute(
+      {
+        text: '{"text":"Только это","voice":"sulafat","style":"bright","scene":"studio"}',
+      },
+      {} as never
+    );
+
+    expect(calls).toEqual([
+      {
+        text: "Только это",
+        options: {
+          voice: "Sulafat",
+          style: "bright",
+          scene: "studio",
+        },
+      },
+    ]);
   });
 });

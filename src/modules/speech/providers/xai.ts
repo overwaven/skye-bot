@@ -65,8 +65,9 @@ export class XaiSpeechProvider implements SpeechProvider {
     return {
       defaultVoice: this.settings.ttsVoice,
       voices: XAI_TTS_VOICES,
-      // xAI supports inline speech tags ([laugh], <whisper>…</whisper>) in text.
-      expressive: true,
+      // Inline speech tags go in `text` ([laugh], <whisper>…</whisper>).
+      // No separate style/scene channel — do not advertise expressive notes.
+      expressive: false,
     };
   }
 
@@ -138,9 +139,8 @@ export class XaiSpeechProvider implements SpeechProvider {
     const timeoutSignal = AbortSignal.timeout(TTS_TIMEOUT_MS);
     const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 
-    // xAI supports inline speech tags in the text body itself. Optional scene/style
-    // hints are prepended as plain direction when present (tags work if the caller
-    // already put them in `text`).
+    // xAI only supports expression via inline tags inside `text`. Never prepend
+    // style/scene notes — they would be spoken literally.
     const spoken = buildXaiTtsText(text, options);
 
     try {
@@ -195,10 +195,7 @@ export class XaiSpeechProvider implements SpeechProvider {
   }
 }
 
-/** Optionally wrap transcript with director notes; speech tags in text are left intact. */
-export function buildXaiTtsText(transcript: string, options: SpeechSynthesisOptions): string {
-  const notes = [options.scene, options.style].filter((s) => s?.trim()).join(" ");
-  if (!notes) return transcript;
-  // Soft stage direction — models ignore unknown tags; plain prefix is safer.
-  return `${notes.trim()}\n\n${transcript}`;
+/** xAI speaks the text body verbatim; ignore style/scene so they are never vocalized. */
+export function buildXaiTtsText(transcript: string, _options: SpeechSynthesisOptions = {}): string {
+  return transcript;
 }

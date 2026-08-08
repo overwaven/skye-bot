@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "../../core/module.js";
+import { parseVoiceToolPayload } from "../../utils/markdown.js";
 import type { SpeechService } from "./service.js";
 import type { SpeechSynthesisOptions } from "./types.js";
 import { oggOpusDurationSeconds } from "./transcode.js";
@@ -75,13 +76,15 @@ export function createSendVoiceTool(options: VoiceToolOptions): ToolDefinition {
     execute: async (args, _tenant, signal) => {
       if (prepared) return "A voice note is already prepared for this response.";
 
-      const transcript = String(args.text ?? "").trim();
+      // Models sometimes nest the whole tool payload inside `text` as JSON.
+      const nested = parseVoiceToolPayload(String(args.text ?? ""));
+      const transcript = (nested?.text ?? String(args.text ?? "")).trim();
       if (!transcript) return "Error: text is required.";
       if (transcript.length > MAX_VOICE_TRANSCRIPT_CHARS) {
         return `Error: the voice transcript must be at most ${MAX_VOICE_TRANSCRIPT_CHARS} characters. Shorten it and try again.`;
       }
 
-      const voiceInput = String(args.voice ?? "").trim();
+      const voiceInput = String(args.voice ?? nested?.voice ?? "").trim();
       let voice: string | undefined;
       if (voiceInput) {
         if (voices) {
@@ -93,8 +96,8 @@ export function createSendVoiceTool(options: VoiceToolOptions): ToolDefinition {
         }
       }
 
-      const style = limitedOptionalString(args.style);
-      const scene = limitedOptionalString(args.scene);
+      const style = limitedOptionalString(args.style ?? nested?.style);
+      const scene = limitedOptionalString(args.scene ?? nested?.scene);
       const synthesisOptions = { voice, style, scene };
 
       await options.onStart?.();
