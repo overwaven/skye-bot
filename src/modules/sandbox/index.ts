@@ -2,6 +2,7 @@ import type { SkyeModule } from "../../core/module.js";
 import { sandboxConfigSchema } from "./config.js";
 import { SandboxService } from "./service.js";
 import { sandboxTools } from "./tools.js";
+import { sendRichReply } from "../telegram/helpers.js";
 
 declare module "../../core/module.js" {
   interface SkyeServices {
@@ -49,8 +50,18 @@ export const sandboxModule: SkyeModule = {
               handler: async (ctx, tenant) => {
                 const command = ctx.match?.toString().trim();
                 if (!command) {
-                  await ctx.reply(
-                    "Usage: /sandbox <command>\nExample: /sandbox curl -s https://api.github.com/users/daytonaio"
+                  await sendRichReply(
+                    ctx,
+                    [
+                      "## Sandbox",
+                      "",
+                      "Usage: `/sandbox <command>`",
+                      "",
+                      "Example:",
+                      "```",
+                      "/sandbox curl -s https://api.github.com/users/daytonaio",
+                      "```",
+                    ].join("\n")
                   );
                   return;
                 }
@@ -61,9 +72,15 @@ export const sandboxModule: SkyeModule = {
                   .filter(Boolean)
                   .join("\n")
                   .slice(0, 3800);
-                await ctx.reply(`Exit code: ${result.exitCode}\n\n${output || "(no output)"}`, {
-                  reply_to_message_id: ctx.message?.message_id,
-                });
+                const body = output || "_(no output)_";
+                await sendRichReply(
+                  ctx,
+                  [
+                    `## Exit code \`${result.exitCode}\``,
+                    "",
+                    output ? ["```", body, "```"].join("\n") : body,
+                  ].join("\n")
+                );
               },
             },
             {
@@ -72,7 +89,10 @@ export const sandboxModule: SkyeModule = {
               handler: async (ctx, tenant) => {
                 await ctx.replyWithChatAction("typing");
                 await service.reset(tenant.chatId);
-                await ctx.reply("Sandbox reset. A fresh environment is ready.");
+                await sendRichReply(
+                  ctx,
+                  "✅ **Sandbox reset.** A fresh environment is ready."
+                );
               },
             },
             {
@@ -81,11 +101,22 @@ export const sandboxModule: SkyeModule = {
               handler: async (ctx, tenant) => {
                 const status = await service.status(tenant.chatId);
                 if (!status) {
-                  await ctx.reply("No active sandbox for this chat yet.");
+                  await sendRichReply(ctx, "_No active sandbox for this chat yet._");
                   return;
                 }
-                await ctx.reply(
-                  `Name: ${status.name}\nStatus: ${status.status}\nResources: ${status.cpu} CPU, ${status.memoryGiB} GiB RAM, ${status.diskGiB} GiB disk\nAuto-stop: ${status.autoStopMinutes ?? "unknown"} minutes\nPersistent: ${status.persistent}`
+                await sendRichReply(
+                  ctx,
+                  [
+                    "## Sandbox status",
+                    "",
+                    `| | |`,
+                    `|---|---|`,
+                    `| **Name** | \`${status.name}\` |`,
+                    `| **Status** | **${status.status}** |`,
+                    `| **Resources** | ${status.cpu} CPU · ${status.memoryGiB} GiB RAM · ${status.diskGiB} GiB disk |`,
+                    `| **Auto-stop** | ${status.autoStopMinutes ?? "unknown"} minutes |`,
+                    `| **Persistent** | ${status.persistent ? "yes" : "no"} |`,
+                  ].join("\n")
                 );
               },
             },

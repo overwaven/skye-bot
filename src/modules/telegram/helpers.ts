@@ -1,5 +1,13 @@
 import type { Context as GrammyContext } from "grammy";
-import type { InputRichMessage, Message, ReplyParameters } from "grammy/types";
+import type {
+  ForceReply,
+  InlineKeyboardMarkup,
+  InputRichMessage,
+  Message,
+  ReplyKeyboardMarkup,
+  ReplyKeyboardRemove,
+  ReplyParameters,
+} from "grammy/types";
 import type { LogEntry } from "../chatLog/service.js";
 import type { AuditEntry } from "../audit/service.js";
 import { log } from "../../utils/log.js";
@@ -455,36 +463,93 @@ function replyParameters(ctx: GrammyContext): ReplyParameters | undefined {
   return id == null ? undefined : { message_id: id };
 }
 
-export async function sendRichReply(ctx: GrammyContext, markdown: string): Promise<Message> {
+export type RichReplyMarkup =
+  | InlineKeyboardMarkup
+  | ReplyKeyboardMarkup
+  | ReplyKeyboardRemove
+  | ForceReply;
+
+type TelegramApi = {
+  sendRichMessage: GrammyContext["api"]["sendRichMessage"];
+  sendMessage: GrammyContext["api"]["sendMessage"];
+  editMessageText: GrammyContext["api"]["editMessageText"];
+};
+
+export async function sendRichChatMessage(
+  api: TelegramApi,
+  chatId: number | string,
+  markdown: string,
+  options?: {
+    message_thread_id?: number;
+    reply_parameters?: ReplyParameters;
+    reply_markup?: RichReplyMarkup;
+    disable_notification?: boolean;
+  }
+): Promise<Message> {
+  const richMessage: InputRichMessage = { markdown };
+  const other: {
+    message_thread_id?: number;
+    reply_parameters?: ReplyParameters;
+    reply_markup?: RichReplyMarkup;
+    disable_notification?: boolean;
+  } = {};
+  if (options?.message_thread_id != null) other.message_thread_id = options.message_thread_id;
+  if (options?.reply_parameters) other.reply_parameters = options.reply_parameters;
+  if (options?.reply_markup) other.reply_markup = options.reply_markup;
+  if (options?.disable_notification) other.disable_notification = true;
   try {
-    const richMessage: InputRichMessage = { markdown };
-    const other: {
-      message_thread_id?: number;
-      reply_parameters?: ReplyParameters;
-    } = {};
-    const tid = threadId(ctx);
-    if (tid != null) other.message_thread_id = tid;
-    const rp = replyParameters(ctx);
-    if (rp) other.reply_parameters = rp;
-    return await withTelegramRetry(
-      () => ctx.api.sendRichMessage(ctx.chat!.id, richMessage, other),
-      { context: "sendRichMessage" }
-    );
+    return await withTelegramRetry(() => api.sendRichMessage(chatId, richMessage, other), {
+      context: "sendRichMessage",
+    });
   } catch (e) {
-    log.warn({ err: e }, "sendRichMessage failed, falling back to plain messages");
+    log.warn({ err: e }, "sendRichMessage failed, falling back to plain message");
     const chunks = splitTelegramText(markdown);
     let first: Message | undefined;
     for (const [i, chunk] of chunks.entries()) {
-      const msg = await ctx.reply(chunk, {
-        message_thread_id: threadId(ctx),
-        ...(i === 0 && ctx.message?.message_id
-          ? { reply_to_message_id: ctx.message.message_id }
+      const msg = await api.sendMessage(chatId, chunk, {
+        ...(options?.message_thread_id != null
+          ? { message_thread_id: options.message_thread_id }
           : {}),
+        ...(i === 0 && options?.reply_parameters
+          ? { reply_parameters: options.reply_parameters }
+          : {}),
+        ...(i === 0 && options?.reply_markup ? { reply_markup: options.reply_markup } : {}),
+        ...(i === 0 && options?.disable_notification ? { disable_notification: true } : {}),
       });
       first ??= msg;
     }
     return first!;
   }
+}
+
+export async function editRichChatMessage(
+  api: TelegramApi,
+  chatId: number | string,
+  messageId: number,
+  markdown: string,
+  replyMarkup?: InlineKeyboardMarkup
+): Promise<void> {
+  const richMessage: InputRichMessage = { markdown };
+  const other: { reply_markup?: InlineKeyboardMarkup } = {};
+  if (replyMarkup != null) other.reply_markup = replyMarkup;
+  try {
+    await api.editMessageText(chatId, messageId, richMessage, other);
+  } catch (e) {
+    log.warn({ err: e }, "rich editMessageText failed, falling back to plain Markdown");
+    await api.editMessageText(chatId, messageId, markdown, { ...other, parse_mode: "Markdown" });
+  }
+}
+
+export async function sendRichReply(
+  ctx: GrammyContext,
+  markdown: string,
+  options?: { reply_markup?: RichReplyMarkup }
+): Promise<Message> {
+  return sendRichChatMessage(ctx.api, ctx.chat!.id, markdown, {
+    message_thread_id: threadId(ctx),
+    reply_parameters: replyParameters(ctx),
+    reply_markup: options?.reply_markup,
+  });
 }
 
 export async function sendRichReplyChunked(
@@ -619,11 +684,18 @@ export function createDraftManager(ctx: GrammyContext) {
       if (stopped || !ctx.chat) return;
       updating = updating
         .then(async () => {
-          statusMessage = await ctx.reply(renderDraftStatus(latestStatus, false), {
-            parse_mode: "HTML",
-            message_thread_id: threadId(ctx),
-            ...(ctx.message?.message_id ? { reply_to_message_id: ctx.message.message_id } : {}),
-          });
+          const richMessage: InputRichMessage = {
+            markdown: renderDraftStatus(latestStatus, false),
+          };
+          const other: {
+            message_thread_id?: number;
+            reply_parameters?: ReplyParameters;
+          } = {};
+          const tid = threadId(ctx);
+          if (tid != null) other.message_thread_id = tid;
+          const rp = replyParameters(ctx);
+          if (rp) other.reply_parameters = rp;
+          statusMessage = await ctx.api.sendRichMessage(ctx.chat!.id, richMessage, other);
         })
         .catch((e) => log.debug({ err: e }, "Group status message failed"));
     }, 4_000);
@@ -640,14 +712,16 @@ export function createDraftManager(ctx: GrammyContext) {
         latestStatus = nextStatus;
         if (!statusMessage || !ctx.chat) return;
         updating = updating
-          .then(() =>
-            ctx.api.editMessageText(
+          .then(() => {
+            const richMessage: InputRichMessage = {
+              markdown: renderDraftStatus(latestStatus, false),
+            };
+            return ctx.api.editMessageText(
               ctx.chat!.id,
               statusMessage!.message_id,
-              renderDraftStatus(latestStatus, false),
-              { parse_mode: "HTML" }
-            )
-          )
+              richMessage
+            );
+          })
           .then(() => undefined)
           .catch((e) => log.debug({ err: e }, "Group status update failed"));
       },

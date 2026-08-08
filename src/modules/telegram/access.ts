@@ -20,14 +20,14 @@ export type AccessDecision =
 export function checkAccess(deps: AccessDeps, chatId: number, userId?: number): AccessDecision {
   if (userId && deps.admin.isAdmin(userId)) return { ok: true, reason: "admin" };
   if (userId && deps.admin.isBanned(userId)) {
-    return { ok: false, reason: "banned", message: "You've been banned from using this bot." };
+    return { ok: false, reason: "banned", message: "**You've been banned** from using this bot." };
   }
 
   if (deps.mode === "private") {
     return {
       ok: false,
       reason: "private",
-      message: "This is a private bot. Ask its owner for administrator access.",
+      message: "This is a **private bot**. Ask its owner for administrator access.",
     };
   }
 
@@ -38,7 +38,7 @@ export function checkAccess(deps: AccessDeps, chatId: number, userId?: number): 
     return {
       ok: false,
       reason: "not_allowed",
-      message: "This chat isn't authorized. Ask a bot administrator to allow it.",
+      message: "This chat isn't authorized. Ask a bot administrator to **allow** it.",
     };
   }
 
@@ -50,14 +50,14 @@ export function checkAccess(deps: AccessDeps, chatId: number, userId?: number): 
     return {
       ok: false,
       reason: "no_subscription",
-      message: `Skye Plus is required to use this bot. Tap /plus to subscribe with Telegram Stars (${deps.subscriptionStars} ⭐ / 30 days).`,
+      message: `**Skye Plus** is required to use this bot. Tap \`/plus\` to subscribe with Telegram Stars (**${deps.subscriptionStars} ⭐** / 30 days).`,
     };
   }
 
   return {
     ok: false,
     reason: "not_allowed",
-    message: "This chat isn't authorized. Ask a bot administrator to allow it.",
+    message: "This chat isn't authorized. Ask a bot administrator to **allow** it.",
   };
 }
 

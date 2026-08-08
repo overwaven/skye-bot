@@ -114,6 +114,28 @@ export const migrations: Migration[] = [
       migratePersonalityToPrimaryAgents(db);
     },
   },
+  {
+    id: "006-agent-edit-sessions",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS agent_edit_sessions (
+          owner_user_id  INTEGER NOT NULL,
+          chat_id        INTEGER NOT NULL,
+          thread_id      INTEGER NOT NULL DEFAULT 0,
+          scope          TEXT    NOT NULL,
+          agent_id       TEXT    NOT NULL,
+          pending_id     TEXT,
+          name           TEXT    NOT NULL,
+          description    TEXT    NOT NULL,
+          instructions   TEXT    NOT NULL,
+          model_id       TEXT,
+          awaiting_field TEXT,
+          updated_at     TEXT    NOT NULL,
+          PRIMARY KEY (owner_user_id, chat_id, thread_id)
+        );
+      `);
+    },
+  },
 ];
 
 function migrateThreadAgentsToChatAgents(db: Database.Database): void {

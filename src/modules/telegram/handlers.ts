@@ -57,6 +57,7 @@ import {
   senderTag,
   sendRichReply,
   sendRichReplyChunked,
+  sendRichChatMessage,
   serializeError,
   shouldRunProactiveForMessage,
   toDataUrl,
@@ -674,7 +675,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       public: true,
       handler: async (ctx, tenant) => {
         deps.reliability.queue.cancelChat(tenant.chatId);
-        await ctx.reply("Stopped.", { reply_to_message_id: ctx.message?.message_id });
+        await sendRichReply(ctx, "**Stopped.**");
       },
     },
     {
@@ -683,7 +684,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       public: true,
       handler: async (ctx) => {
         if (!deps.admin.isAdmin(ctx.from?.id)) {
-          await ctx.reply("This command is available to bot administrators only.");
+          await sendRichReply(
+            ctx,
+            "This command is available to **bot administrators** only."
+          );
           return;
         }
 
@@ -795,7 +799,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       handler: async (ctx, tenant) => {
         const prompt = ctx.match?.toString().trim();
         if (!prompt) {
-          await ctx.reply("Provide a description after /image, e.g. /image a cat on the moon");
+          await sendRichReply(
+            ctx,
+            "Provide a description after `/image`, e.g. `/image a cat on the moon`"
+          );
           return;
         }
 
@@ -815,9 +822,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           );
 
           if (!buffer) {
-            await ctx.reply("No image was generated. Try a different prompt.", {
-              reply_to_message_id: ctx.message!.message_id,
-            });
+            await sendRichReply(ctx, "_No image was generated. Try a different prompt._");
             deps.audit.log({
               ...ctxAudit(ctx),
               msgType: "image",
@@ -865,11 +870,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
             { kind: "image_failed", prompt, error: fmtError(e) },
             `image generation failed: ${fmtError(e)}`
           );
-          await ctx
-            .reply("Failed to generate the image. Please try again.", {
-              reply_to_message_id: ctx.message!.message_id,
-            })
-            .catch(() => {});
+          await sendRichReply(ctx, "**Failed to generate the image.** Please try again.").catch(() => {});
           deps.audit.log({
             ...ctxAudit(ctx),
             msgType: "image",
@@ -895,8 +896,13 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         if (ctx.chat?.type === "private") {
           kb.webApp("Open Settings", deps.webappUrl);
         }
-        await ctx.reply(
-          "Open the settings panel to manage your subscription, model, and connectors:",
+        await sendRichReply(
+          ctx,
+          [
+            "## Settings",
+            "",
+            "Open the settings panel to manage your subscription, model, and connectors.",
+          ].join("\n"),
           {
             reply_markup: kb,
           }
@@ -1103,17 +1109,17 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         if (result.status === "not_found") {
           await sendRichReply(
             ctx,
-            `Reminder #${number} was not found. Use /reminders to refresh the list.`
+            `Reminder **#${number}** was not found. Use \`/reminders\` to refresh the list.`
           );
           return;
         }
         if (result.status === "forbidden") {
-          await sendRichReply(ctx, "Only the reminder creator can change it.");
+          await sendRichReply(ctx, "_Only the reminder creator can change it._");
           return;
         }
         await sendRichReply(
           ctx,
-          `Reminder #${number} postponed until ${formatReminderTime(result.reminder.fireAt)}.`
+          `⏳ Reminder **#${number}** postponed until **${formatReminderTime(result.reminder.fireAt)}**.`
         );
       },
     },
@@ -1145,15 +1151,15 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         if (result.status === "not_found") {
           await sendRichReply(
             ctx,
-            `Reminder #${number} was not found. Use /reminders to refresh the list.`
+            `Reminder **#${number}** was not found. Use \`/reminders\` to refresh the list.`
           );
           return;
         }
         if (result.status === "forbidden") {
-          await sendRichReply(ctx, "Only the reminder creator can delete it.");
+          await sendRichReply(ctx, "_Only the reminder creator can delete it._");
           return;
         }
-        await sendRichReply(ctx, `Reminder #${number} deleted.`);
+        await sendRichReply(ctx, `✅ Reminder **#${number}** deleted.`);
       },
     },
   ];
@@ -1203,7 +1209,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     const decision = checkAccess(access, chatId, ctx.from?.id);
     if (!decision.ok) {
       const directed = isDirectedAtBot(ctx);
-      if (directed) await ctx.reply(decision.message);
+      if (directed) await sendRichReply(ctx, decision.message);
       return;
     }
     return next();
@@ -1392,10 +1398,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       if (billAcc && hasMeteredAccess(access, tenant.chatId, tenant.userId)) {
         if (deps.billing.effectiveRemaining(billAcc) <= 0) {
           await draft.delete();
-          await ctx.reply(
-            "You're out of tokens for this month. Use /plus to buy a token pack, or wait for your renewal date.",
-            { reply_to_message_id: ctx.message?.message_id }
-          );
+          await sendRichReply(ctx, "**You're out of tokens** for this month.\n\nUse `/plus` to buy a token pack, or wait for your renewal date.");
           deps.audit.log({
             ...ctxAudit(ctx),
             msgType,
@@ -1514,9 +1517,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
 
       if (!text && !hasPreparedMedia()) {
         await draft.delete();
-        await ctx.reply("I couldn't generate a response. Please try again.", {
-          reply_to_message_id: ctx.message?.message_id,
-        });
+        await sendRichReply(ctx, "_I couldn't generate a response._ Please try again.");
         deps.audit.log({
           ...ctxAudit(ctx),
           msgType,
@@ -1625,11 +1626,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     } catch (e) {
       if (controller.signal.aborted) {
         if (options.signal?.reason instanceof QueueTimeoutError) {
-          await ctx
-            .reply("This request took too long and was stopped. Please send it again.", {
-              reply_to_message_id: ctx.message?.message_id,
-            })
-            .catch(() => {});
+          await sendRichReply(
+            ctx,
+            "**This request took too long** and was stopped. Please send it again."
+          ).catch(() => {});
         }
         return;
       }
@@ -1637,14 +1637,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       log.error({ ...serializeError(e), latencyMs: ms }, `${msgType} handler failed`);
       await draft.delete();
       reactSafely(ctx, "😢");
-      await ctx
-        .reply(
-          `I could not complete this response — every available attempt failed. Please send it again.`,
-          {
-            reply_to_message_id: ctx.message?.message_id,
-          }
-        )
-        .catch(() => {});
+      await sendRichReply(
+        ctx,
+        "**I could not complete this response** — every available attempt failed. Please send it again."
+      ).catch(() => {});
       deps.audit.log({
         ...ctxAudit(ctx),
         msgType,
@@ -1744,9 +1740,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     if (imageMatch) {
       const prompt = imageMatch[1].trim();
       if (!prompt) {
-        await ctx.reply("Provide a description after /image, e.g. /image make it cartoon", {
-          reply_to_message_id: ctx.message.message_id,
-        });
+        await sendRichReply(ctx, "Provide a description after `/image`, e.g. `/image make it cartoon`");
         return;
       }
       await runImageEditCommand(ctx, tenant, prompt);
@@ -1756,10 +1750,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     // --- Vision analysis (single photo sent with a question for Skye) ---
     if (!isDirectedAtBot(ctx)) return;
     if (deps.llm.supportsImages() === false) {
-      await ctx.reply(
-        "The current model does not support image input. Send text or switch to a vision-capable model.",
-        { reply_to_message_id: ctx.message.message_id }
-      );
+      await sendRichReply(ctx, "The current model does not support image input. Send text or switch to a **vision-capable** model.");
       return;
     }
     const replyRefs = await collectReferenceImages(ctx);
@@ -1786,11 +1777,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         threadReferenceImages.delete(tk);
       } catch (e) {
         log.error({ ...serializeError(e) }, "Photo preparation failed");
-        await ctx
-          .reply("Failed to process the image. Please try again or send text instead.", {
-            reply_to_message_id: ctx.message.message_id,
-          })
-          .catch(() => {});
+        await sendRichReply(
+          ctx,
+          "**Failed to process the image.** Please try again or send text instead."
+        ).catch(() => {});
       }
     });
   });
@@ -1814,9 +1804,9 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     if (imageMatch) {
       const prompt = imageMatch[1].trim();
       if (!prompt) {
-        await (captionCtx ?? ctxs[0]).reply(
-          "Provide a description after /image, e.g. /image make it cartoon",
-          { reply_to_message_id: ctxs[0].message?.message_id }
+        await sendRichReply(
+          captionCtx ?? ctxs[0],
+          "Provide a description after `/image`, e.g. `/image make it cartoon`"
         );
         return;
       }
@@ -1827,9 +1817,9 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     // --- Vision analysis: feed all photos to the model at once ---
     if (!isDirectedAtBot(captionCtx ?? ctxs[0])) return;
     if (deps.llm.supportsImages() === false) {
-      await (captionCtx ?? ctxs[0]).reply(
-        "The current model does not support image input. Send text or switch to a vision-capable model.",
-        { reply_to_message_id: ctxs[0].message?.message_id }
+      await sendRichReply(
+        captionCtx ?? ctxs[0],
+        "The current model does not support image input. Send text or switch to a **vision-capable** model."
       );
       return;
     }
@@ -1859,11 +1849,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         threadReferenceImages.delete(tk);
       } catch (e) {
         log.error({ ...serializeError(e) }, "Media group preparation failed");
-        await (captionCtx ?? ctxs[0])
-          .reply("Failed to process the images. Please try again or send text instead.", {
-            reply_to_message_id: ctxs[0].message?.message_id,
-          })
-          .catch(() => {});
+        await sendRichReply(
+          captionCtx ?? ctxs[0],
+          "**Failed to process the images.** Please try again or send text instead."
+        ).catch(() => {});
       }
     });
   }
@@ -1892,9 +1881,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
       const buffer = await deps.llm.generateImage(prompt, photoUrls, AbortSignal.timeout(180_000));
 
       if (!buffer) {
-        await ctx.reply("No image was generated. Try a different prompt.", {
-          reply_to_message_id: ctx.message!.message_id,
-        });
+        await sendRichReply(ctx, "_No image was generated._ Try a different prompt.");
         deps.audit.log({
           ...ctxAudit(ctx),
           msgType: "image_edit",
@@ -1947,11 +1934,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         { kind: "image_edit_failed", prompt, error: fmtError(e) },
         `image edit failed: ${fmtError(e)}`
       );
-      await ctx
-        .reply("Failed to edit the image. Please try again.", {
-          reply_to_message_id: ctx.message!.message_id,
-        })
-        .catch(() => {});
+      await sendRichReply(ctx, "**Failed to edit the image.** Please try again.").catch(() => {});
       deps.audit.log({
         ...ctxAudit(ctx),
         msgType: "image_edit",
@@ -2006,9 +1989,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           [`✅ Saved sticker \`${saved.id}\``, "", `_${saved.description}_`, followUp].join("\n")
         );
       } catch (e) {
-        await ctx.reply(`Could not save sticker: ${fmtError(e)}`, {
-          reply_to_message_id: ctx.message?.message_id,
-        });
+        await sendRichReply(ctx, `**Could not save sticker:** ${fmtError(e)}`);
       }
       return true;
     }
@@ -2042,9 +2023,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     if (!teach.enabled || !teach.pendingPayload) return false;
     const description = text.trim();
     if (!description) {
-      await ctx.reply("Send a non-empty description for the sticker.", {
-        reply_to_message_id: ctx.message?.message_id,
-      });
+      await sendRichReply(ctx, "Send a **non-empty description** for the sticker.");
       return true;
     }
     try {
@@ -2068,9 +2047,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         ].join("\n")
       );
     } catch (e) {
-      await ctx.reply(`Could not save sticker: ${fmtError(e)}`, {
-        reply_to_message_id: ctx.message?.message_id,
-      });
+      await sendRichReply(ctx, `**Could not save sticker:** ${fmtError(e)}`);
     }
     return true;
   }
@@ -2090,10 +2067,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
 
     if (!isDirectedAtBot(ctx)) return;
     if (deps.llm.supportsImages() === false) {
-      await ctx.reply(
-        "The current model does not support image input, so I can't see this sticker.",
-        { reply_to_message_id: ctx.message.message_id }
-      );
+      await sendRichReply(ctx, "The current model does not support image input, so I can't see this sticker. Switch to a **vision-capable** model.");
       return;
     }
 
@@ -2130,11 +2104,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         await runLlmReply(ctx, tenant, userItem, textPart, "sticker", { signal });
       } catch (e) {
         log.error({ ...serializeError(e) }, "Sticker preparation failed");
-        await ctx
-          .reply("Failed to process the sticker. Please try again or send text instead.", {
-            reply_to_message_id: ctx.message.message_id,
-          })
-          .catch(() => {});
+        await sendRichReply(
+          ctx,
+          "**Failed to process the sticker.** Please try again or send text instead."
+        ).catch(() => {});
       }
     });
   });
@@ -2143,10 +2116,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
   bot.on("message:animation", async (ctx) => {
     if (!isDirectedAtBot(ctx)) return;
     if (deps.llm.supportsImages() === false) {
-      await ctx.reply(
-        "The current model does not support image input, so I can't see this GIF.",
-        { reply_to_message_id: ctx.message.message_id }
-      );
+      await sendRichReply(ctx, "The current model does not support image input, so I can't see this GIF. Switch to a **vision-capable** model.");
       return;
     }
 
@@ -2185,11 +2155,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         await runLlmReply(ctx, tenant, userItem, textPart, "animation", { signal });
       } catch (e) {
         log.error({ ...serializeError(e) }, "Animation preparation failed");
-        await ctx
-          .reply("Failed to process the GIF. Please try again or send text instead.", {
-            reply_to_message_id: ctx.message.message_id,
-          })
-          .catch(() => {});
+        await sendRichReply(
+          ctx,
+          "**Failed to process the GIF.** Please try again or send text instead."
+        ).catch(() => {});
       }
     });
   });
@@ -2197,10 +2166,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
   // --- Voice handler ---
   bot.on("message:voice", async (ctx) => {
     if (!deps.speech.isSttAvailable()) {
-      await ctx.reply(
-        "Voice recognition is not configured. Please ask the bot administrator to set up a speech provider (Yandex SpeechKit or OpenRouter).",
-        { reply_to_message_id: ctx.message.message_id }
-      );
+      await sendRichReply(ctx, "**Voice recognition is not configured.** Ask the bot administrator to set up a speech provider (Yandex SpeechKit or OpenRouter).");
       return;
     }
 
@@ -2222,9 +2188,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         const recognized = await deps.speech.recognize(audioBuffer);
 
         if (!recognized) {
-          await ctx.reply("Could not recognize speech. Please try again or send text.", {
-            reply_to_message_id: ctx.message.message_id,
-          });
+          await sendRichReply(ctx, "_Could not recognize speech._ Please try again or send text.");
           return;
         }
 
@@ -2240,11 +2204,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         await runLlmReply(ctx, tenant, userItem, recognized, "voice", { signal });
       } catch (e) {
         log.error({ ...serializeError(e) }, "Voice preparation failed");
-        await ctx
-          .reply("Failed to process the voice message. Please try again or send text.", {
-            reply_to_message_id: ctx.message.message_id,
-          })
-          .catch(() => {});
+        await sendRichReply(
+          ctx,
+          "**Failed to process the voice message.** Please try again or send text."
+        ).catch(() => {});
       }
     });
   });
@@ -2272,10 +2235,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           const supportsFiles =
             deps.llm.supportsImages() !== false || !!deps.llm.settings.pdfEngine;
           if (!supportsFiles) {
-            await ctx.reply(
-              "The current model/provider does not support PDF file input. Try switching to a vision-capable model or configuring a PDF parsing engine.",
-              { reply_to_message_id: ctx.message.message_id }
-            );
+            await sendRichReply(ctx, "The current model/provider does not support PDF file input. Try switching to a vision-capable model or configuring a PDF parsing engine.");
             return;
           }
 
@@ -2303,19 +2263,14 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
 
         // --- Text/code documents ---
         if (!isTextDocument) {
-          await ctx.reply(
-            `I can read text/code documents and PDFs, but this file looks like ${mime || "a binary file"}. Send a .txt/.md/.json/.csv/code file or a PDF.`,
-            { reply_to_message_id: ctx.message.message_id }
-          );
+          await sendRichReply(ctx, `I can read text/code documents and PDFs, but this file looks like ${mime || "a binary file"}. Send a .txt/.md/.json/.csv/code file or a PDF.`);
           return;
         }
 
         const { buffer } = await downloadTelegramFile(doc.file_id);
         const fileText = buffer.toString("utf8").replace(/\0/g, "").slice(0, 16000);
         if (!fileText.trim()) {
-          await ctx.reply("I couldn't read text from this document.", {
-            reply_to_message_id: ctx.message.message_id,
-          });
+          await sendRichReply(ctx, "_I couldn't read text from this document._");
           return;
         }
 
@@ -2337,11 +2292,10 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         );
       } catch (e) {
         log.error({ ...serializeError(e) }, "Document preparation failed");
-        await ctx
-          .reply("Failed to process the document. Please try again or paste the text.", {
-            reply_to_message_id: ctx.message.message_id,
-          })
-          .catch(() => {});
+        await sendRichReply(
+          ctx,
+          "**Failed to process the document.** Please try again or paste the text."
+        ).catch(() => {});
       }
     });
   });
@@ -2355,9 +2309,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     const tk = threadKey(tenant);
     await enqueue(tk, async (signal) => {
       if (!deps.speech.isSttAvailable()) {
-        await ctx.reply("Audio recognition is not configured.", {
-          reply_to_message_id: ctx.message.message_id,
-        });
+        await sendRichReply(ctx, "**Audio recognition is not configured.**");
         return;
       }
       try {
@@ -2365,10 +2317,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         const { buffer } = await downloadTelegramFile(ctx.message.audio.file_id);
         const recognized = await deps.speech.recognize(buffer);
         if (!recognized) {
-          await ctx.reply(
-            "I couldn't transcribe this audio file. Voice notes work best; other audio formats may need transcoding first.",
-            { reply_to_message_id: ctx.message.message_id }
-          );
+          await sendRichReply(ctx, "I couldn't transcribe this audio file. Voice notes work best; other audio formats may need transcoding first.");
           return;
         }
         const prompt = captionRaw || "Please answer based on this audio transcript.";
@@ -2377,9 +2326,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         await runLlmReply(ctx, tenant, userItem, `${prompt}\n${recognized}`, "audio", { signal });
       } catch (e) {
         log.error({ ...serializeError(e) }, "Audio preparation failed");
-        await ctx.reply("Failed to process the audio file.", {
-          reply_to_message_id: ctx.message.message_id,
-        });
+        await sendRichReply(ctx, "**Failed to process the audio file.**");
       }
     });
   });
@@ -2391,9 +2338,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     const tk = threadKey(tenant);
     await enqueue(tk, async (signal) => {
       if (!deps.speech.isSttAvailable()) {
-        await ctx.reply("Video-note transcription is not configured.", {
-          reply_to_message_id: ctx.message.message_id,
-        });
+        await sendRichReply(ctx, "**Video-note transcription is not configured.**");
         return;
       }
       try {
@@ -2401,10 +2346,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         const { buffer } = await downloadTelegramFile(ctx.message.video_note.file_id);
         const recognized = await deps.speech.recognize(buffer);
         if (!recognized) {
-          await ctx.reply(
-            "I received the video note, but couldn't extract speech from it without transcoding. Send it as a voice note for reliable transcription.",
-            { reply_to_message_id: ctx.message.message_id }
-          );
+          await sendRichReply(ctx, "I received the video note, but couldn't extract speech from it without transcoding. Send it as a voice note for reliable transcription.");
           return;
         }
         const content = `${replyContext(ctx)}${senderTag(ctx)}Video note transcript:\n${recognized}`;
@@ -2412,9 +2354,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         await runLlmReply(ctx, tenant, userItem, recognized, "video_note", { signal });
       } catch (e) {
         log.error({ ...serializeError(e) }, "Video-note preparation failed");
-        await ctx.reply("Failed to process the video note.", {
-          reply_to_message_id: ctx.message.message_id,
-        });
+        await sendRichReply(ctx, "**Failed to process the video note.**");
       }
     });
   });
@@ -2468,9 +2408,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
             "Improve the user's image prompt. Keep it concise, concrete, and directly usable. Output only the improved prompt.",
             control.prompt
           );
-          await ctx.reply(promptRes.output_text || control.prompt, {
-            reply_to_message_id: messageId,
-          });
+          await sendRichReply(ctx, promptRes.output_text || control.prompt);
           return;
         }
 
@@ -2497,9 +2435,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
         );
         signal.throwIfAborted();
         if (!buffer) {
-          await ctx.reply("No image was generated. Try another variation.", {
-            reply_to_message_id: messageId,
-          });
+          await sendRichReply(ctx, "_No image was generated._ Try another variation.");
           return;
         }
         const sent = await ctx.replyWithPhoto(new InputFile(buffer, "image.png"), {
@@ -2526,9 +2462,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
           { kind: "image_variant_failed", error: fmtError(e) },
           `image variant failed: ${fmtError(e)}`
         );
-        await ctx.reply("Failed to generate this image variant.", {
-          reply_to_message_id: messageId,
-        });
+        await sendRichReply(ctx, "**Failed to generate this image variant.**");
       }
     });
   });
@@ -2711,8 +2645,7 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
             throw new Error("Reminder produced no response");
           }
 
-          await bot.api.sendMessage(reminder.chatId, text, {
-            parse_mode: "Markdown",
+          await sendRichChatMessage(bot.api, reminder.chatId, text, {
             ...(reminder.threadId != null ? { message_thread_id: reminder.threadId } : {}),
           });
 

@@ -171,6 +171,46 @@ export class ChatAgentService {
     return this.get(chatId, storedId)!;
   }
 
+  rename(chatId: number, id: string, newId: string): ChatAgentRecord {
+    const fromId = normalizeId(id);
+    const toId = chatAgentIdSchema.parse(normalizeId(newId));
+    if (fromId === toId) return this.get(chatId, fromId)!;
+    const existing = this.get(chatId, fromId);
+    if (!existing) {
+      throw new Error(`Chat agent "${chatProfileId(fromId)}" does not exist.`);
+    }
+    if (this.get(chatId, toId)) {
+      throw new Error(`Chat agent "${chatProfileId(toId)}" already exists.`);
+    }
+    const now = new Date().toISOString();
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO chat_agents
+            (chat_id, id, name, description, instructions, model_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          chatId,
+          toId,
+          existing.name,
+          existing.description,
+          existing.instructions,
+          existing.modelId ?? null,
+          existing.createdAt,
+          now
+        );
+      this.db
+        .prepare(
+          `UPDATE chat_agent_selection SET agent_id = ?
+           WHERE chat_id = ? AND agent_id = ?`
+        )
+        .run(toId, chatId, fromId);
+      this.db.prepare("DELETE FROM chat_agents WHERE chat_id = ? AND id = ?").run(chatId, fromId);
+    })();
+    return this.get(chatId, toId)!;
+  }
+
   delete(chatId: number, id: string): boolean {
     const storedId = normalizeId(id);
     return this.db.transaction(() => {

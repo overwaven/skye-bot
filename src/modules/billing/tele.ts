@@ -166,10 +166,8 @@ function buildCommands(deps: BillingDeps): TelegramCommand[] {
       public: true,
       handler: async (ctx, tenant) => {
         const acc = deps.billing.getAccount(tenant.userId!);
-        await sendRichReply(ctx, statusText(deps, acc));
-        await ctx.reply("👇", {
+        await sendRichReply(ctx, `${statusText(deps, acc)}\n\n👇`, {
           reply_markup: plusKeyboard(deps, acc, isPrivateChat(ctx)),
-          reply_to_message_id: undefined,
         });
       },
     },
@@ -179,8 +177,9 @@ function buildCommands(deps: BillingDeps): TelegramCommand[] {
       public: true,
       handler: async (ctx, tenant) => {
         const acc = deps.billing.getAccount(tenant.userId!);
-        await sendRichReply(ctx, modelsText(deps, acc));
-        await ctx.reply("👇", { reply_markup: modelsKeyboard(deps, acc) });
+        await sendRichReply(ctx, `${modelsText(deps, acc)}\n\n👇`, {
+          reply_markup: modelsKeyboard(deps, acc),
+        });
       },
     },
     {
@@ -189,7 +188,6 @@ function buildCommands(deps: BillingDeps): TelegramCommand[] {
       public: true,
       handler: async (ctx, tenant) => {
         const acc = deps.billing.getAccount(tenant.userId!);
-        await sendRichReply(ctx, statusText(deps, acc));
         const active = deps.billing.hasActiveSub(acc);
         const kb = active
           ? (() => {
@@ -198,7 +196,7 @@ function buildCommands(deps: BillingDeps): TelegramCommand[] {
               return k;
             })()
           : plusKeyboard(deps, acc, isPrivateChat(ctx));
-        await ctx.reply("👇", { reply_markup: kb });
+        await sendRichReply(ctx, `${statusText(deps, acc)}\n\n👇`, { reply_markup: kb });
       },
     },
     {
@@ -208,19 +206,19 @@ function buildCommands(deps: BillingDeps): TelegramCommand[] {
       handler: async (ctx, tenant) => {
         const acc = deps.billing.getAccount(tenant.userId!);
         if (!deps.billing.hasActiveSub(acc) || !acc.lastChargeId) {
-          await sendRichReply(ctx, "You don't have an active subscription to cancel.");
+          await sendRichReply(ctx, "_You don't have an active subscription to cancel._");
           return;
         }
         await sendRichReply(
           ctx,
-          "Cancel your Skye Plus subscription?\n\nYour access stays until the renewal date, then ends. No further charges."
+          "**Cancel your Skye Plus subscription?**\n\nYour access stays until the renewal date, then ends. No further charges.",
+          {
+            reply_markup: new InlineKeyboard()
+              .text("Yes, cancel", "bill:cancel")
+              .row()
+              .text("Keep it", "bill:menu"),
+          }
         );
-        await ctx.reply("👇", {
-          reply_markup: new InlineKeyboard()
-            .text("Yes, cancel", "bill:cancel")
-            .row()
-            .text("Keep it", "bill:menu"),
-        });
       },
     },
   ];
@@ -285,8 +283,9 @@ function buildHandlers(deps: BillingDeps): TelegramHandler[] {
             [{ label: `${deps.cfg.title} (30 days)`, amount: deps.cfg.subscriptionStars }],
             { subscription_period: deps.cfg.subscriptionPeriodSeconds }
           );
-          await ctx.reply(
-            `Subscribe to ${deps.cfg.title} for ${deps.cfg.subscriptionStars} ⭐ / 30 days:`,
+          await sendRichReply(
+            ctx,
+            `**Subscribe to ${deps.cfg.title}** for **${deps.cfg.subscriptionStars} ⭐** / 30 days:`,
             {
               reply_markup: new InlineKeyboard().url(`Pay ${deps.cfg.subscriptionStars} ⭐`, url),
             }

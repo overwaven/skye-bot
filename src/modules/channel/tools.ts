@@ -4,6 +4,7 @@ import type { TenantContext } from "../../core/tenant.js";
 import type { AdminService } from "../admin/service.js";
 import type { ChannelService } from "./service.js";
 import { resolveChannelChatId } from "./config.js";
+import { editRichChatMessage, sendRichChatMessage } from "../telegram/helpers.js";
 
 export interface ChannelToolDeps {
   service: ChannelService;
@@ -76,8 +77,7 @@ export function channelTools(deps: ChannelToolDeps): ToolDefinition[] {
         const chatId = deps.getChatId()!;
 
         try {
-          const msg = await bot.api.sendMessage(chatId, text, {
-            parse_mode: "Markdown",
+          const msg = await sendRichChatMessage(bot.api, chatId, text, {
             ...(args.disable_notification === true ? { disable_notification: true } : {}),
           });
           return `Posted to channel. Message id: ${msg.message_id}.`;
@@ -121,9 +121,7 @@ export function channelTools(deps: ChannelToolDeps): ToolDefinition[] {
         const chatId = deps.getChatId()!;
 
         try {
-          await bot.api.editMessageText(chatId, messageId, text, {
-            parse_mode: "Markdown",
-          });
+          await editRichChatMessage(bot.api, chatId, messageId, text);
           return `Edited channel post #${messageId}.`;
         } catch (e) {
           const detail = e instanceof Error ? e.message : String(e);

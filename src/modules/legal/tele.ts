@@ -3,7 +3,7 @@ import type { TelegramCommand, TelegramHandler } from "../../core/module.js";
 import type { TenantContext } from "../../core/tenant.js";
 import type { LegalService } from "./service.js";
 import type { LegalConfig } from "./config.js";
-import { sendRichReply } from "../telegram/helpers.js";
+import { sendRichEdit, sendRichReply } from "../telegram/helpers.js";
 import { appCommit, appVersion } from "../../core/appInfo.js";
 import type { ConnectorService } from "../connectors/service.js";
 import { log } from "../../utils/log.js";
@@ -35,8 +35,7 @@ export function buildLegalCommands(deps: LegalDeps): TelegramCommand[] {
           "",
           "The source link below points to the code for this deployment when a commit was supplied by the operator.",
         ].join("\n");
-        await sendRichReply(ctx, md);
-        await ctx.reply("Open source, by design.", {
+        await sendRichReply(ctx, `${md}\n\n_Open source, by design._`, {
           reply_markup: new InlineKeyboard()
             .url("View source", sourceUrl)
             .row()
@@ -49,7 +48,7 @@ export function buildLegalCommands(deps: LegalDeps): TelegramCommand[] {
       description: "Terms of Service",
       public: true,
       handler: async (ctx) => {
-        await ctx.reply("📄 Terms of Service", {
+        await sendRichReply(ctx, "## Terms of Service\n\nOpen the full document with the button below.", {
           reply_markup: new InlineKeyboard().url("Open Terms", cfg.terms_url),
         });
       },
@@ -59,9 +58,13 @@ export function buildLegalCommands(deps: LegalDeps): TelegramCommand[] {
       description: "Privacy Policy",
       public: true,
       handler: async (ctx) => {
-        await ctx.reply("🔐 Privacy Policy", {
-          reply_markup: new InlineKeyboard().url("Open Privacy Policy", cfg.privacy_url),
-        });
+        await sendRichReply(
+          ctx,
+          "## Privacy Policy\n\nOpen the full document with the button below.",
+          {
+            reply_markup: new InlineKeyboard().url("Open Privacy Policy", cfg.privacy_url),
+          }
+        );
       },
     },
     {
@@ -128,7 +131,7 @@ export function buildLegalCommands(deps: LegalDeps): TelegramCommand[] {
           "",
           "This cannot be undone. Continue?",
         ].join("\n");
-        await ctx.reply(md, {
+        await sendRichReply(ctx, md, {
           reply_markup: new InlineKeyboard()
             .text("Yes, delete everything", "legal:delete:confirm")
             .row()
@@ -157,7 +160,7 @@ export function buildLegalHandlers(deps: LegalDeps): TelegramHandler[] {
       try {
         if (action === "delete:cancel") {
           await ctx.answerCallbackQuery("Cancelled.");
-          await ctx.editMessageText("Data deletion cancelled. Nothing was erased.");
+          await sendRichEdit(ctx, "_Data deletion cancelled._ Nothing was erased.");
           return;
         }
 
@@ -202,13 +205,14 @@ export function buildLegalHandlers(deps: LegalDeps): TelegramHandler[] {
             "",
             "_This message is the only confirmation we keep. A fresh start — say hi anytime._",
           ].join("\n");
-          await ctx.editMessageText(md);
+          await sendRichEdit(ctx, md);
           return;
         }
       } catch {
         await ctx.answerCallbackQuery("Something went wrong.");
-        await ctx.editMessageText(
-          "Couldn't complete data deletion. Please contact support via /paysupport."
+        await sendRichEdit(
+          ctx,
+          "**Couldn't complete data deletion.** Please contact support via /paysupport."
         );
         return;
       }

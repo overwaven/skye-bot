@@ -88,7 +88,7 @@ export const chatConfigModule: SkyeModule = {
             setChatThreadPrompt(tenant.chatId, tenant.threadId, prompt);
             await sendRichReply(
               ctx,
-              `Additional instructions set for ${scopeLabel(tenant.threadId)}. They apply on top of the active agent.`
+              `✅ Additional instructions set for **${scopeLabel(tenant.threadId)}**. They apply on top of the active agent.`
             );
           },
         },
@@ -104,10 +104,18 @@ export const chatConfigModule: SkyeModule = {
               );
               return;
             }
-            await ctx.reply(prompt, {
-              message_thread_id: tenant.threadId,
-              reply_to_message_id: ctx.message?.message_id,
-            });
+            await sendRichReply(
+              ctx,
+              [
+                `## Additional instructions`,
+                "",
+                `_Scope: ${scopeLabel(tenant.threadId)}_`,
+                "",
+                "```",
+                prompt,
+                "```",
+              ].join("\n")
+            );
           },
         },
         {
@@ -118,8 +126,8 @@ export const chatConfigModule: SkyeModule = {
             await sendRichReply(
               ctx,
               removed
-                ? `Additional instructions cleared for ${scopeLabel(tenant.threadId)}.`
-                : `No additional instructions were set for ${scopeLabel(tenant.threadId)}.`
+                ? `🧹 Additional instructions cleared for **${scopeLabel(tenant.threadId)}**.`
+                : `_No additional instructions were set for ${scopeLabel(tenant.threadId)}._`
             );
           },
         },

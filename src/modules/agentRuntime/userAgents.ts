@@ -245,6 +245,54 @@ export class UserAgentService {
     return this.get(ownerUserId, storedId)!;
   }
 
+  rename(ownerUserId: number, id: string, newId: string): UserAgentRecord {
+    const fromId = normalizeId(id);
+    const toId = userAgentIdSchema.parse(normalizeId(newId));
+    if (fromId === toId) return this.get(ownerUserId, fromId)!;
+    const existing = this.get(ownerUserId, fromId);
+    if (!existing) {
+      throw new Error(`Personal agent "${personalProfileId(fromId)}" does not exist.`);
+    }
+    if (this.get(ownerUserId, toId)) {
+      throw new Error(`Personal agent "${personalProfileId(toId)}" already exists.`);
+    }
+    const now = new Date().toISOString();
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO user_agents
+            (owner_user_id, id, name, description, instructions, model_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          ownerUserId,
+          toId,
+          existing.name,
+          existing.description,
+          existing.instructions,
+          existing.modelId ?? null,
+          existing.createdAt,
+          now
+        );
+      this.db
+        .prepare(
+          `UPDATE user_thread_agents SET agent_id = ?
+           WHERE owner_user_id = ? AND agent_id = ?`
+        )
+        .run(toId, ownerUserId, fromId);
+      this.db
+        .prepare(
+          `UPDATE user_configs SET primary_agent_id = ?
+           WHERE user_id = ? AND primary_agent_id = ?`
+        )
+        .run(toId, ownerUserId, fromId);
+      this.db
+        .prepare("DELETE FROM user_agents WHERE owner_user_id = ? AND id = ?")
+        .run(ownerUserId, fromId);
+    })();
+    return this.get(ownerUserId, toId)!;
+  }
+
   delete(ownerUserId: number, id: string): boolean {
     const storedId = normalizeId(id);
     return this.db.transaction(() => {

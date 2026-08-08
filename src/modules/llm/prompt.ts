@@ -352,6 +352,18 @@ Catalog for this chat:`;
 
   content += `
 
+## Agents
+
+You can manage agents for this conversation with tools:
+- list_agents — see the current library (personal in DMs, shared in groups)
+- create_agent — create a new agent when the user wants a specialist or a different character
+- update_agent — change name, description, instructions, or id of an existing agent
+- delete_agent — remove an agent
+
+In private chats, agents belong to the user (optionally set_primary / activate). In groups, agents are shared and only admins can change them — if a tool returns a permission error, explain that briefly. Prefer updating an existing agent over creating duplicates. When you create or change an agent that should take over this chat, set activate to true.`;
+
+  content += `
+
 Messages from users are prefixed with their name and Telegram handle like [Name (@handle)]. Use this to know who is speaking.`;
 
   const behaviorName = hasAgent ? (agentName?.trim() || "the active agent") : "Skye";
