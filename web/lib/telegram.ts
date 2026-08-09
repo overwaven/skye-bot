@@ -26,10 +26,12 @@ interface TelegramThemeParams {
 interface TelegramWebApp {
   initData?: string
   initDataUnsafe?: { user?: TelegramUser }
+  version?: string
   colorScheme?: "light" | "dark"
   themeParams?: TelegramThemeParams
   ready?: () => void
   expand?: () => void
+  isVersionAtLeast?: (version: string) => boolean
   onEvent?: (event: string, callback: () => void) => void
   offEvent?: (event: string, callback: () => void) => void
   setHeaderColor?: (color: string) => void
@@ -62,8 +64,14 @@ declare global {
     Telegram?: {
       WebApp?: TelegramWebApp
     }
+    __skyeChromeScheme?: "light" | "dark"
   }
 }
+
+const CHROME = {
+  light: "#F4F7FA",
+  dark: "#0A0F16",
+} as const
 
 export function webApp(): TelegramWebApp | undefined {
   if (typeof window === "undefined") return undefined
@@ -78,60 +86,76 @@ export function telegramScheme(): "light" | "dark" {
   const preview = new URLSearchParams(window.location.search).get("theme")
   if (preview === "light" || preview === "dark") return preview
   const scheme = webApp()?.colorScheme
-  if (scheme) return scheme
+  if (scheme === "light" || scheme === "dark") return scheme
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light"
 }
 
-export function syncTelegramTheme(): "light" | "dark" {
-  const app = webApp()
-  const scheme = telegramScheme()
-  const root = document.documentElement
-  root.classList.toggle("dark", scheme === "dark")
-  root.style.colorScheme = scheme
-
-  const theme = app?.themeParams
-  const variables: Array<[string, string | undefined]> = [
-    ["--background", theme?.bg_color],
-    ["--foreground", theme?.text_color],
-    ["--card", theme?.section_bg_color ?? theme?.secondary_bg_color],
-    ["--card-foreground", theme?.text_color],
-    ["--popover", theme?.section_bg_color ?? theme?.secondary_bg_color],
-    ["--popover-foreground", theme?.text_color],
-    ["--primary", theme?.button_color ?? theme?.accent_text_color],
-    ["--primary-foreground", theme?.button_text_color],
-    ["--secondary", theme?.secondary_bg_color],
-    ["--secondary-foreground", theme?.text_color],
-    ["--muted", theme?.secondary_bg_color],
-    ["--muted-foreground", theme?.hint_color ?? theme?.subtitle_text_color],
-    ["--accent", theme?.secondary_bg_color],
-    ["--accent-foreground", theme?.accent_text_color ?? theme?.text_color],
-    ["--destructive", theme?.destructive_text_color],
-    ["--border", theme?.section_separator_color],
-    ["--input", theme?.section_separator_color],
-    ["--ring", theme?.accent_text_color ?? theme?.link_color],
-  ]
-
-  for (const [name, value] of variables) {
-    if (value) root.style.setProperty(name, value)
+function supportsChromeColors(app: TelegramWebApp): boolean {
+  if (typeof app.isVersionAtLeast === "function") {
+    return app.isVersionAtLeast("6.1")
   }
+  return false
+}
+
+/**
+ * Paint Telegram chrome to match Liquid Glass once per scheme.
+ * Never call this from themeChanged — writing colors there creates a feedback loop.
+ */
+export function applyTelegramChrome(scheme: "light" | "dark"): void {
+  const app = webApp()
+  if (!app || !supportsChromeColors(app)) return
+  if (window.__skyeChromeScheme === scheme) return
+
+  window.__skyeChromeScheme = scheme
+  const chrome = CHROME[scheme]
 
   try {
-    app?.setHeaderColor?.("bg_color")
-    app?.setBackgroundColor?.("bg_color")
-    app?.setBottomBarColor?.("bottom_bar_bg_color")
+    app.setHeaderColor?.(chrome)
+    app.setBackgroundColor?.(chrome)
+    app.setBottomBarColor?.(chrome)
   } catch {
-    // Older Telegram clients reject some named theme colors.
+    // Older or restricted Telegram clients reject some theme color APIs.
   }
+}
 
+/**
+ * Resolve the active color scheme for React theming.
+ * Optionally paints Telegram chrome on first sync only (`paintChrome`).
+ */
+export function syncTelegramTheme(
+  options: { paintChrome?: boolean } = { paintChrome: true }
+): "light" | "dark" {
+  const scheme = telegramScheme()
+  if (options.paintChrome) applyTelegramChrome(scheme)
   return scheme
 }
 
 export function onTelegramThemeChange(callback: () => void): () => void {
   const app = webApp()
-  app?.onEvent?.("themeChanged", callback)
-  return () => app?.offEvent?.("themeChanged", callback)
+  let debounceTimer: number | null = null
+  let lastSeen = telegramScheme()
+
+  const handler = () => {
+    const next = telegramScheme()
+    if (next === lastSeen) return
+    if (debounceTimer != null) window.clearTimeout(debounceTimer)
+    // Hold the new scheme briefly so transient echoes cannot thrash React state.
+    debounceTimer = window.setTimeout(() => {
+      debounceTimer = null
+      const stable = telegramScheme()
+      if (stable === lastSeen) return
+      lastSeen = stable
+      callback()
+    }, 150)
+  }
+
+  app?.onEvent?.("themeChanged", handler)
+  return () => {
+    if (debounceTimer != null) window.clearTimeout(debounceTimer)
+    app?.offEvent?.("themeChanged", handler)
+  }
 }
 
 export function readyTelegram(): void {

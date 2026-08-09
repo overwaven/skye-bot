@@ -3,12 +3,12 @@
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import {
-  IconCircleCheck,
-  IconInfoCircle,
-  IconAlertTriangle,
-  IconAlertOctagon,
-  IconLoader,
-} from "@tabler/icons-react"
+  ArrowPathIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
+  ExclamationTriangleIcon,
+  InformationCircleIcon,
+} from "@heroicons/react/24/outline"
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
@@ -18,11 +18,11 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       icons={{
-        success: <IconCircleCheck className="size-4" />,
-        info: <IconInfoCircle className="size-4" />,
-        warning: <IconAlertTriangle className="size-4" />,
-        error: <IconAlertOctagon className="size-4" />,
-        loading: <IconLoader className="size-4 animate-spin" />,
+        success: <CheckCircleIcon className="size-4" />,
+        info: <InformationCircleIcon className="size-4" />,
+        warning: <ExclamationTriangleIcon className="size-4" />,
+        error: <ExclamationCircleIcon className="size-4" />,
+        loading: <ArrowPathIcon className="size-4 animate-spin" />,
       }}
       style={
         {

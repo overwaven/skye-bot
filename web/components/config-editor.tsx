@@ -13,17 +13,16 @@ import {
 } from "react"
 import { toast } from "sonner"
 import {
-  IconAlertTriangle,
-  IconCheck,
-  IconDeviceFloppy,
-  IconFileCode,
-  IconHash,
-  IconLoader2,
-  IconPlayerPlay,
-  IconRefresh,
-  IconSearch,
-  IconShieldLock,
-} from "@tabler/icons-react"
+  ArrowDownOnSquareIcon,
+  ArrowPathIcon,
+  CheckIcon,
+  CodeBracketSquareIcon,
+  ExclamationTriangleIcon,
+  HashtagIcon,
+  LockClosedIcon,
+  MagnifyingGlassIcon,
+  PlayIcon,
+} from "@heroicons/react/24/outline"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -366,19 +365,19 @@ export function ConfigEditorSheet({
             ) : loadError ? (
               <div className="flex flex-1 flex-col items-start justify-center gap-4 p-6">
                 <Alert variant="destructive" className="max-w-lg">
-                  <IconAlertTriangle />
+                  <ExclamationTriangleIcon />
                   <AlertTitle>Unable to load config</AlertTitle>
                   <AlertDescription>{loadError}</AlertDescription>
                 </Alert>
                 <Button onClick={() => void load()}>
-                  <IconRefresh /> Try again
+                  <ArrowPathIcon /> Try again
                 </Button>
               </div>
             ) : (
               <>
                 <div className="shrink-0 space-y-3 border-b px-5 py-3 sm:px-6">
                   <Alert className="rounded-2xl border-border/70 bg-secondary/55">
-                    <IconShieldLock />
+                    <LockClosedIcon />
                     <AlertTitle className="text-sm">Owner only · secrets visible</AlertTitle>
                     <AlertDescription className="text-xs leading-5 text-pretty">
                       This file includes the bot token and API keys. A backup is
@@ -397,7 +396,7 @@ export function ConfigEditorSheet({
                       disabled={!!busy || loading}
                       onClick={() => void load()}
                     >
-                      <IconRefresh className={loading ? "animate-spin" : ""} />
+                      <ArrowPathIcon className={loading ? "animate-spin" : ""} />
                       Reload
                     </Button>
                     <Button
@@ -407,9 +406,9 @@ export function ConfigEditorSheet({
                       onClick={() => void validate()}
                     >
                       {busy === "validate" ? (
-                        <IconLoader2 className="animate-spin" />
+                        <ArrowPathIcon className="animate-spin" />
                       ) : (
-                        <IconCheck />
+                        <CheckIcon />
                       )}
                       Check
                     </Button>
@@ -419,9 +418,9 @@ export function ConfigEditorSheet({
                       onClick={() => setConfirm("save")}
                     >
                       {busy === "save" ? (
-                        <IconLoader2 className="animate-spin" />
+                        <ArrowPathIcon className="animate-spin" />
                       ) : (
-                        <IconDeviceFloppy />
+                        <ArrowDownOnSquareIcon />
                       )}
                       Save
                     </Button>
@@ -432,9 +431,9 @@ export function ConfigEditorSheet({
                       onClick={() => setConfirm("restart")}
                     >
                       {busy === "restart" ? (
-                        <IconLoader2 className="animate-spin" />
+                        <ArrowPathIcon className="animate-spin" />
                       ) : (
-                        <IconPlayerPlay />
+                        <PlayIcon />
                       )}
                       Save & restart
                     </Button>
@@ -484,7 +483,7 @@ export function ConfigEditorSheet({
                             scrollToLine(textareaRef.current, section.line)
                           }
                         >
-                          <IconHash className="size-3 text-primary/80" />
+                          <HashtagIcon className="size-3 text-primary/80" />
                           <span className="font-mono">{section.key}</span>
                         </button>
                       ))}
@@ -499,7 +498,7 @@ export function ConfigEditorSheet({
                         Filter sections
                       </Label>
                       <div className="relative">
-                        <IconSearch className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                           id={searchId}
                           value={sectionQuery}
@@ -527,7 +526,7 @@ export function ConfigEditorSheet({
                                 }
                               >
                                 <span className="flex min-w-0 items-center gap-1.5 font-medium">
-                                  <IconHash className="size-3.5 shrink-0 text-primary/80" />
+                                  <HashtagIcon className="size-3.5 shrink-0 text-primary/80" />
                                   <span className="truncate font-mono">
                                     {section.key}
                                   </span>
@@ -562,7 +561,7 @@ export function ConfigEditorSheet({
                                   key={`${issue.path}-${index}`}
                                   className="flex gap-2"
                                 >
-                                  <IconAlertTriangle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                                  <ExclamationTriangleIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
                                   <span>
                                     <span className="font-mono font-medium">
                                       {issue.path}
@@ -659,7 +658,7 @@ export function ConfigEditorSheet({
                         />
                       </div>
                       <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <IconFileCode className="size-3.5" />
+                        <CodeBracketSquareIcon className="size-3.5" />
                         <span>
                           <kbd className="rounded border bg-muted px-1 font-mono text-[10px]">
                             ⌘/Ctrl+S
@@ -706,11 +705,11 @@ export function ConfigEditorSheet({
               onClick={() => void save(confirm === "restart")}
             >
               {busy ? (
-                <IconLoader2 className="animate-spin" />
+                <ArrowPathIcon className="animate-spin" />
               ) : confirm === "restart" ? (
-                <IconPlayerPlay />
+                <PlayIcon />
               ) : (
-                <IconDeviceFloppy />
+                <ArrowDownOnSquareIcon />
               )}
               {confirm === "restart" ? "Save & restart" : "Save config"}
             </Button>
