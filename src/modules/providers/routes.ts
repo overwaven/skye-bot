@@ -1,5 +1,6 @@
 import type { ModuleContext, PanelRoute } from "../../core/module.js";
 import type { PanelRequest } from "../panel/index.js";
+import { resolveChatNames } from "../panel/chatNames.js";
 import {
   MODEL_CAPABILITIES,
   PROVIDER_KINDS,
@@ -117,14 +118,10 @@ function canUseChat(ctx: ModuleContext, req: PanelRequest, chatId: number): bool
   );
 }
 
-function recentChats(ctx: ModuleContext, userId: number) {
+async function recentChats(ctx: ModuleContext, userId: number) {
   const rows = ctx.db
-    .prepare<
-      [number],
-      { chatId: number; chatName: string | null; chatType: string | null; lastSeen: string }
-    >(
-      `SELECT chat_id AS chatId, MAX(chat_name) AS chatName, MAX(chat_type) AS chatType,
-              MAX(ts) AS lastSeen
+    .prepare<[number], { chatId: number; chatType: string | null; lastSeen: string }>(
+      `SELECT chat_id AS chatId, MAX(chat_type) AS chatType, MAX(ts) AS lastSeen
        FROM request_logs
        WHERE user_id = ? AND chat_id IS NOT NULL
        GROUP BY chat_id
@@ -133,11 +130,15 @@ function recentChats(ctx: ModuleContext, userId: number) {
     )
     .all(userId);
   if (!rows.some((row) => row.chatId === userId)) {
-    rows.unshift({ chatId: userId, chatName: "Personal chat", chatType: "private", lastSeen: "" });
+    rows.unshift({ chatId: userId, chatType: "private", lastSeen: "" });
   }
+  const names = await resolveChatNames(
+    ctx,
+    rows.filter((row) => row.chatId !== userId).map((row) => row.chatId)
+  );
   return rows.map((row) => ({
     chatId: row.chatId,
-    name: row.chatId === userId ? "Personal chat" : row.chatName || `Chat ${row.chatId}`,
+    name: row.chatId === userId ? "Personal chat" : names.get(row.chatId) || `Chat ${row.chatId}`,
     type: row.chatType || (row.chatId === userId ? "private" : "group"),
   }));
 }
@@ -156,7 +157,7 @@ export function buildProviderRoutes(ctx: ModuleContext, providers: ProviderServi
     {
       method: "get",
       path: "/ai/catalog",
-      handler: (req, res) => {
+      handler: async (req, res) => {
         const panelReq = req as PanelRequest;
         const requested = Number(req.query.chatId ?? panelReq.initData.user.id);
         const chatId =
@@ -169,7 +170,7 @@ export function buildProviderRoutes(ctx: ModuleContext, providers: ProviderServi
         res.json({
           configured: providers.textCatalog().length > 0,
           chatId,
-          chats: recentChats(ctx, panelReq.initData.user.id),
+          chats: await recentChats(ctx, panelReq.initData.user.id),
           routing: providers.getRouting(chatId),
           overrides: providers.getChatRoutingOverrides(chatId),
           defaults: providers.getRouting(),
