@@ -56,10 +56,13 @@ function makeClient(
 describe("xAI image generation", () => {
   test("posts to /images/generations with b64_json", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: [{ b64_json: Buffer.from("PNG").toString("base64") }] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      })
+      new Response(
+        JSON.stringify({ data: [{ b64_json: Buffer.from("PNG").toString("base64") }] }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      )
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -90,9 +93,12 @@ describe("xAI image generation", () => {
 
   test("edits a single reference via /images/edits", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: [{ b64_json: Buffer.from("EDIT").toString("base64") }] }), {
-        status: 200,
-      })
+      new Response(
+        JSON.stringify({ data: [{ b64_json: Buffer.from("EDIT").toString("base64") }] }),
+        {
+          status: 200,
+        }
+      )
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -112,9 +118,12 @@ describe("xAI image generation", () => {
 
   test("edits multiple references via images[]", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: [{ b64_json: Buffer.from("MULTI").toString("base64") }] }), {
-        status: 200,
-      })
+      new Response(
+        JSON.stringify({ data: [{ b64_json: Buffer.from("MULTI").toString("base64") }] }),
+        {
+          status: 200,
+        }
+      )
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -124,7 +133,11 @@ describe("xAI image generation", () => {
       imageModel: "grok-imagine-image-quality",
     });
 
-    await client.generateImage("combine", ["https://a/1.png", "https://a/2.png", "https://a/3.png"]);
+    await client.generateImage("combine", [
+      "https://a/1.png",
+      "https://a/2.png",
+      "https://a/3.png",
+    ]);
     const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body));
     expect(body.images).toHaveLength(3);
     expect(body.image).toBeUndefined();

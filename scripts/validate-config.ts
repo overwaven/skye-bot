@@ -82,11 +82,7 @@ function main(): void {
     warnings.push("voice.provider=yandex but voice.yc_api_key is unset");
   }
 
-  if (
-    cfg.voice?.provider === "xai" &&
-    !cfg.voice.xai?.api_key &&
-    !cfg.xai_api_key
-  ) {
+  if (cfg.voice?.provider === "xai" && !cfg.voice.xai?.api_key && !cfg.xai_api_key) {
     warnings.push("voice.provider=xai but voice.xai.api_key and xai_api_key are unset");
   }
 

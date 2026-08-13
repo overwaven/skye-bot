@@ -15,6 +15,7 @@ import { memoryModule } from "./modules/memory/index.js";
 import { monitoringModule } from "./modules/monitoring/index.js";
 import { panelModule } from "./modules/panel/index.js";
 import { proactiveModule } from "./modules/proactive/index.js";
+import { providersModule } from "./modules/providers/index.js";
 import { remindersModule } from "./modules/reminders/index.js";
 import { sandboxModule } from "./modules/sandbox/index.js";
 import { speechModule } from "./modules/speech/index.js";
@@ -24,7 +25,8 @@ import { userConfigModule } from "./modules/userConfig/index.js";
 
 /**
  * Module load order matters:
- *   - llm first (provides the model catalog consumed by billing & telegram)
+ *   - providers before llm and speech (provides the live multimodal catalog)
+ *   - llm before billing (provides the model catalog consumed by billing & telegram)
  *   - userConfig before connectors (connectors read per-user settings)
  *   - admin before telegram (provides access gate allow/ban list)
  *   - billing after llm (needs the model catalog + default model id)
@@ -34,6 +36,7 @@ import { userConfigModule } from "./modules/userConfig/index.js";
  *   - panel start() runs after all modules' init() returned their routes
  */
 export const modules: readonly SkyeModule[] = [
+  providersModule,
   llmModule,
   userConfigModule,
   chatConfigModule,

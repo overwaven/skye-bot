@@ -200,9 +200,7 @@ export function buildSystemPrompt(
   const effectiveAgentInstructions = agentInstructions?.trim();
   const hasAgent = !!effectiveAgentInstructions;
   const effectiveAddendum = chatAddendum?.trim();
-  let content = hasAgent
-    ? `${effectiveAgentInstructions}${SHARED_PLATFORM_PROMPT}`
-    : SYSTEM_PROMPT;
+  let content = hasAgent ? `${effectiveAgentInstructions}${SHARED_PLATFORM_PROMPT}` : SYSTEM_PROMPT;
 
   if (owner?.name || owner?.tag) {
     const name = owner.name || "the owner";
@@ -366,7 +364,7 @@ In private chats, agents belong to the user (optionally set_primary / activate).
 
 Messages from users are prefixed with their name and Telegram handle like [Name (@handle)]. Use this to know who is speaking.`;
 
-  const behaviorName = hasAgent ? (agentName?.trim() || "the active agent") : "Skye";
+  const behaviorName = hasAgent ? agentName?.trim() || "the active agent" : "Skye";
   content += `
 
 ## Current Behavior — Highest Priority

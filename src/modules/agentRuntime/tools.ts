@@ -21,7 +21,10 @@ function isPrivate(tenant: TenantContext): boolean {
   return tenant.chatType === "private";
 }
 
-async function assertCanManage(deps: AgentToolsDeps, tenant: TenantContext): Promise<string | null> {
+async function assertCanManage(
+  deps: AgentToolsDeps,
+  tenant: TenantContext
+): Promise<string | null> {
   if (!tenant.userId) return "Error: a Telegram user account is required.";
   if (isPrivate(tenant)) return null;
   const api = deps.getTelegramApi();
@@ -92,7 +95,12 @@ export function agentTools(deps: AgentToolsDeps): ToolDefinition[] {
         }
         const lines = agents.map((agent) => {
           const id = chatProfileId(agent.id);
-          return formatAgentLine(id, agent.name, agent.description, active === id ? ["active"] : []);
+          return formatAgentLine(
+            id,
+            agent.name,
+            agent.description,
+            active === id ? ["active"] : []
+          );
         });
         return `Shared chat agents (${agents.length}/${deps.maxChatAgents}):\n${lines.join("\n")}`;
       },
@@ -209,9 +217,7 @@ export function agentTools(deps: AgentToolsDeps): ToolDefinition[] {
         if (!agentId) return "Error: agent_id is required.";
         const patch = {
           ...(typeof args.name === "string" ? { name: args.name.trim() } : {}),
-          ...(typeof args.description === "string"
-            ? { description: args.description.trim() }
-            : {}),
+          ...(typeof args.description === "string" ? { description: args.description.trim() } : {}),
           ...(typeof args.instructions === "string"
             ? { instructions: args.instructions.trim() }
             : {}),

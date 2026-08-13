@@ -92,9 +92,10 @@ export const stickersModule: SkyeModule = {
               return;
             }
             const remaining =
-              SEED_STICKERS.length - stickersService.list(tenant.chatId).filter((s) =>
-                SEED_STICKERS.some((seed) => seed.id === s.id)
-              ).length;
+              SEED_STICKERS.length -
+              stickersService
+                .list(tenant.chatId)
+                .filter((s) => SEED_STICKERS.some((seed) => seed.id === s.id)).length;
             await sendRichReply(
               ctx,
               [
@@ -131,9 +132,5 @@ export const stickersModule: SkyeModule = {
 export { stickersService, formatStickerCatalog };
 export type { StickersService, ChatSticker } from "./service.js";
 export { createSendStickerTool, type PreparedStickerMessage } from "./tools.js";
-export {
-  resolveVisualMedia,
-  visualSourceFromMessage,
-  downloadVisionDataUrl,
-} from "./media.js";
+export { resolveVisualMedia, visualSourceFromMessage, downloadVisionDataUrl } from "./media.js";
 export { SEED_STICKERS } from "./seed.js";

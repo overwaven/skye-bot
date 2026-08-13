@@ -16,6 +16,7 @@ export interface PreparedVoiceMessage {
 interface VoiceToolOptions {
   speech: SpeechService;
   mode: VoiceToolMode;
+  chatId?: number;
   onStart?: () => Promise<void> | void;
   onPrepared: (message: PreparedVoiceMessage) => Promise<void> | void;
 }
@@ -24,7 +25,7 @@ export const MAX_VOICE_TRANSCRIPT_CHARS = 5_000;
 const MAX_DIRECTION_CHARS = 1_000;
 
 export function createSendVoiceTool(options: VoiceToolOptions): ToolDefinition {
-  const capabilities = options.speech.getTtsCapabilities();
+  const capabilities = options.speech.getTtsCapabilities(options.chatId);
   const voices = capabilities.voices ? [...capabilities.voices] : undefined;
   let prepared = false;
 
@@ -101,7 +102,12 @@ export function createSendVoiceTool(options: VoiceToolOptions): ToolDefinition {
       const synthesisOptions = { voice, style, scene };
 
       await options.onStart?.();
-      const audio = await options.speech.synthesize(transcript, synthesisOptions, signal);
+      const audio = await options.speech.synthesize(
+        transcript,
+        synthesisOptions,
+        signal,
+        options.chatId ?? _tenant.chatId
+      );
       if (!audio) return "Voice synthesis failed. Continue with a text response instead.";
       const durationSeconds = oggOpusDurationSeconds(audio);
       if (durationSeconds < 0.1) {

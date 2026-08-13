@@ -128,7 +128,7 @@ export function registerReminderDelivery(opts: {
       );
 
       const reminderAcc = reminder.userId ? deps.billing.getAccount(reminder.userId) : undefined;
-      const reminderModelId = reminderAcc?.modelId ?? deps.defaultModelId;
+      const reminderModelId = reminderAcc?.modelId ?? deps.llm.defaultModelId;
       const reminderModel = deps.llm.resolveModel(reminderModelId);
       const reminderMeter = (usage: { promptTokens: number; completionTokens: number }) => {
         if (!hasMeteredAccess(access, reminder.chatId, reminder.userId)) return;

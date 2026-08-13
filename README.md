@@ -21,7 +21,7 @@
 
 ```bash
 pnpm install
-cp config.example.yaml config.yaml   # then fill in bot_token, openai_key, etc.
+cp config.example.yaml config.yaml   # fill in bot_token; AI setup continues in the Mini App
 pnpm run dev          # or dev:pretty for human-readable logs
 ```
 

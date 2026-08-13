@@ -4,6 +4,7 @@ import {
   ChatBubbleLeftRightIcon,
   ChevronRightIcon,
   Cog6ToothIcon,
+  CpuChipIcon,
   InformationCircleIcon,
   MicrophoneIcon,
   ShieldCheckIcon,
@@ -67,6 +68,7 @@ export function ProfileView({
   onAgents,
   onAdmin,
   onConfig,
+  onAi,
   onAbout,
   onPlus,
 }: {
@@ -80,6 +82,7 @@ export function ProfileView({
   onAgents: () => void
   onAdmin: () => void
   onConfig: () => void
+  onAi: () => void
   onAbout: () => void
   onPlus: () => void
 }) {
@@ -154,6 +157,24 @@ export function ProfileView({
             title="Personal agents"
             subtitle={agentsSummary(agents)}
             onClick={onAgents}
+            trailing={
+              <ChevronRightIcon
+                aria-hidden
+                className="size-4 shrink-0 text-faint [stroke-width:2]"
+              />
+            }
+          />
+          <Divider />
+          <ListRow
+            className="min-h-14"
+            icon={
+              <IconWell>
+                <CpuChipIcon aria-hidden className="size-[18px]" />
+              </IconWell>
+            }
+            title="AI for this chat"
+            subtitle="Images, voice, and transcription"
+            onClick={onAi}
             trailing={
               <ChevronRightIcon
                 aria-hidden

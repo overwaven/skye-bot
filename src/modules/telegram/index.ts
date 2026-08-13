@@ -91,7 +91,7 @@ export const telegramModule: SkyeModule = {
         botToken: c.bot_token,
         maxAttachmentBytes: c.telegram_max_attachment_bytes,
         webappUrl: ctx.config.panel.webapp_url,
-        defaultModelId: ctx.config.default_model_id,
+        defaultModelId: llm.defaultModelId,
         reliability,
         accessMode: c.access.mode,
         subscriptionStars: c.billing.subscription_stars,

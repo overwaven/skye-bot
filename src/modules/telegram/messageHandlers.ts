@@ -477,7 +477,7 @@ export function registerMessageHandlers(opts: {
 
   // --- Voice handler ---
   bot.on("message:voice", async (ctx) => {
-    if (!deps.speech.isSttAvailable()) {
+    if (!deps.speech.isSttAvailable(ctx.chat.id)) {
       await sendRichReply(
         ctx,
         "**Voice recognition is not configured.** Ask the bot administrator to set up a speech provider (Yandex SpeechKit or OpenRouter)."
@@ -500,7 +500,7 @@ export function registerMessageHandlers(opts: {
         }
         const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
 
-        const recognized = await deps.speech.recognize(audioBuffer);
+        const recognized = await deps.speech.recognize(audioBuffer, "ru-RU", tenant.chatId);
 
         if (!recognized) {
           await sendRichReply(ctx, "_Could not recognize speech._ Please try again or send text.");
@@ -629,14 +629,14 @@ export function registerMessageHandlers(opts: {
     const tenant = tenantFromGrammy(ctx);
     const tk = threadKey(tenant);
     await enqueue(tk, async (signal) => {
-      if (!deps.speech.isSttAvailable()) {
+      if (!deps.speech.isSttAvailable(tenant.chatId)) {
         await sendRichReply(ctx, "**Audio recognition is not configured.**");
         return;
       }
       try {
         await ctx.replyWithChatAction("typing");
         const { buffer } = await downloadTelegramFile(ctx.message.audio.file_id);
-        const recognized = await deps.speech.recognize(buffer);
+        const recognized = await deps.speech.recognize(buffer, "ru-RU", tenant.chatId);
         if (!recognized) {
           await sendRichReply(
             ctx,
@@ -661,14 +661,14 @@ export function registerMessageHandlers(opts: {
     const tenant = tenantFromGrammy(ctx);
     const tk = threadKey(tenant);
     await enqueue(tk, async (signal) => {
-      if (!deps.speech.isSttAvailable()) {
+      if (!deps.speech.isSttAvailable(tenant.chatId)) {
         await sendRichReply(ctx, "**Video-note transcription is not configured.**");
         return;
       }
       try {
         await ctx.replyWithChatAction("typing");
         const { buffer } = await downloadTelegramFile(ctx.message.video_note.file_id);
-        const recognized = await deps.speech.recognize(buffer);
+        const recognized = await deps.speech.recognize(buffer, "ru-RU", tenant.chatId);
         if (!recognized) {
           await sendRichReply(
             ctx,

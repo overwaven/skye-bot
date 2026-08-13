@@ -43,11 +43,7 @@ export const monitoringModule: SkyeModule = {
     const c = ctx.config;
     const outLog = c.monitoring.out_log;
     const errorLog = c.monitoring.error_log;
-    const service = new MonitoringService(
-      ctx.db,
-      ctx.services,
-      ctx.config.reminders.enabled
-    );
+    const service = new MonitoringService(ctx.db, ctx.services, ctx.config.reminders.enabled);
 
     return {
       service,

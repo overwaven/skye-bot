@@ -218,8 +218,9 @@ export class ChatAgentService {
         .prepare("DELETE FROM chat_agent_selection WHERE chat_id = ? AND agent_id = ?")
         .run(chatId, storedId);
       return (
-        this.db.prepare("DELETE FROM chat_agents WHERE chat_id = ? AND id = ?").run(chatId, storedId)
-          .changes > 0
+        this.db
+          .prepare("DELETE FROM chat_agents WHERE chat_id = ? AND id = ?")
+          .run(chatId, storedId).changes > 0
       );
     })();
   }

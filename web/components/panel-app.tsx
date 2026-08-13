@@ -6,6 +6,10 @@ import { useTheme } from "next-themes"
 import { toast } from "sonner"
 
 import { ConfigEditorSheet } from "@/components/config-editor"
+import {
+  AiSettingsSheet,
+  ProviderManagerSheet,
+} from "@/components/ai-settings"
 import { MemoryView } from "@/components/panel/memory-view"
 import { PanelTabBar, type TabKey } from "@/components/panel/nav"
 import { PlusView } from "@/components/panel/plus-view"
@@ -29,6 +33,7 @@ import { Toaster } from "@/components/ui/sonner"
 import {
   api,
   type AboutInfo,
+  type AiCatalog,
   type AdminPrincipalsResponse,
   type AgentsResponse,
   type AuditEvent,
@@ -60,6 +65,7 @@ import {
   DEMO_ACCOUNT,
   DEMO_ADMINS,
   DEMO_AGENTS,
+  DEMO_AI_CATALOG,
   DEMO_AUDIT,
   DEMO_CHAT,
   DEMO_CONNECTORS,
@@ -116,6 +122,7 @@ export function PanelApp() {
   const [account, setAccount] = useState<BillingAccount | null>(null)
   const [models, setModels] = useState<ModelEntry[]>([])
   const [defaultModelId, setDefaultModelId] = useState("")
+  const [aiCatalog, setAiCatalog] = useState<AiCatalog | null>(null)
   const [plans, setPlans] = useState<Plans | null>(null)
   const [about, setAbout] = useState<AboutInfo | null>(null)
   const [admins, setAdmins] = useState<AdminPrincipalsResponse | null>(null)
@@ -127,6 +134,8 @@ export function PanelApp() {
   const [aboutOpen, setAboutOpen] = useState(false)
   const [adminOpen, setAdminOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
+  const [providersOpen, setProvidersOpen] = useState(false)
   const configCloseRef = useRef<(() => void) | null>(null)
   const [agentsOpen, setAgentsOpen] = useState(false)
   const [agents, setAgents] = useState<AgentsResponse | null>(null)
@@ -150,6 +159,7 @@ export function PanelApp() {
         setAccount(DEMO_ACCOUNT)
         setModels(DEMO_MODELS)
         setDefaultModelId(DEMO_MODELS[0].id)
+        setAiCatalog(DEMO_AI_CATALOG)
         setPlans(DEMO_PLANS)
         setAbout(DEMO_ABOUT)
         setAdmins(DEMO_ADMINS)
@@ -182,6 +192,7 @@ export function PanelApp() {
         nextPlans,
         nextAbout,
         nextAgents,
+        nextAiCatalog,
       ] = await Promise.all([
         api.getChatConfig(),
         api.getConnectors(),
@@ -192,6 +203,7 @@ export function PanelApp() {
         api.getPlans(),
         api.getAbout(),
         api.getAgents().catch(() => null),
+        api.getAiCatalog(),
       ])
 
       setChatConfig(nextChat)
@@ -204,6 +216,7 @@ export function PanelApp() {
       setPlans(nextPlans)
       setAbout(nextAbout)
       if (nextAgents) setAgents(nextAgents)
+      setAiCatalog(nextAiCatalog)
       if (nextAbout.isAdmin) setAdmins(await api.getAdminPrincipals())
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : String(error))
@@ -279,10 +292,20 @@ export function PanelApp() {
   }, [agents, agentsOpen])
 
   useEffect(() => {
+    if (aiCatalog && !aiCatalog.configured && aiCatalog.canManageProviders) {
+      setProvidersOpen(true)
+    }
+  }, [aiCatalog])
+
+  useEffect(() => {
     const close = agentEditing
       ? () => setAgentEditing(null)
       : connectorEditing
         ? () => setConnectorEditing(null)
+        : providersOpen
+          ? () => setProvidersOpen(false)
+          : aiOpen
+            ? () => setAiOpen(false)
         : agentsOpen
           ? () => setAgentsOpen(false)
           : configOpen
@@ -302,7 +325,19 @@ export function PanelApp() {
     agentsOpen,
     configOpen,
     connectorEditing,
+    aiOpen,
+    providersOpen,
   ])
+
+  const refreshAi = async () => {
+    const [catalog, modelData] = await Promise.all([
+      api.getAiCatalog(aiCatalog?.chatId),
+      api.getModels(),
+    ])
+    setAiCatalog(catalog)
+    setModels(modelData.models)
+    setDefaultModelId(modelData.defaultModelId)
+  }
 
   const setVoiceMode = async (voiceReplyMode: ChatConfig["voiceReplyMode"]) => {
     const previous = chatConfig
@@ -457,6 +492,7 @@ export function PanelApp() {
               onAgents={() => setAgentsOpen(true)}
               onAdmin={() => setAdminOpen(true)}
               onConfig={() => setConfigOpen(true)}
+              onAi={() => setAiOpen(true)}
               onAbout={() => setAboutOpen(true)}
               onPlus={() => setTab("plus")}
             />
@@ -527,6 +563,23 @@ export function PanelApp() {
         open={configOpen}
         onOpenChange={setConfigOpen}
         onRequestCloseRef={configCloseRef}
+      />
+      <AiSettingsSheet
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        initialCatalog={aiCatalog}
+        initialChatConfig={chatConfig}
+        onCatalogChange={setAiCatalog}
+        onManageProviders={() => {
+          setAiOpen(false)
+          setProvidersOpen(true)
+        }}
+      />
+      <ProviderManagerSheet
+        open={providersOpen}
+        onOpenChange={setProvidersOpen}
+        onboarding={Boolean(aiCatalog && !aiCatalog.configured)}
+        onChanged={refreshAi}
       />
       <AgentsSheet
         data={agents}

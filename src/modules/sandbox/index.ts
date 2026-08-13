@@ -89,10 +89,7 @@ export const sandboxModule: SkyeModule = {
               handler: async (ctx, tenant) => {
                 await ctx.replyWithChatAction("typing");
                 await service.reset(tenant.chatId);
-                await sendRichReply(
-                  ctx,
-                  "✅ **Sandbox reset.** A fresh environment is ready."
-                );
+                await sendRichReply(ctx, "✅ **Sandbox reset.** A fresh environment is ready.");
               },
             },
             {

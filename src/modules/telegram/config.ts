@@ -5,7 +5,12 @@ export const telegramConfigSchema = z.object({
   allowed_ids: z.string().default(""),
   telegram_polling_lock: z.string().default("1"),
   telegram_drop_pending_updates: z.enum(["0", "1"]).default("0"),
-  telegram_job_timeout_ms: z.number().int().min(10_000).max(15 * 60_000).default(3 * 60_000),
+  telegram_job_timeout_ms: z
+    .number()
+    .int()
+    .min(10_000)
+    .max(15 * 60_000)
+    .default(3 * 60_000),
   telegram_max_attachment_bytes: z
     .number()
     .int()

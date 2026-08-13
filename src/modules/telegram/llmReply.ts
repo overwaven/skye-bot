@@ -119,11 +119,12 @@ export function createRunLlmReply(opts: {
     const preparedStickers: PreparedStickerMessage[] = [];
     const requestTools = [...baseBuiltinTools];
     const allowVoiceTool = voiceReplyMode !== "text" || VOICE_OUTPUT_REQUEST_RE.test(inputText);
-    if (deps.speech.isTtsAvailable() && allowVoiceTool) {
+    if (deps.speech.isTtsAvailable(tenant.chatId) && allowVoiceTool) {
       requestTools.push(
         createSendVoiceTool({
           speech: deps.speech,
           mode: voiceReplyMode,
+          chatId: tenant.chatId,
           onStart: async () => {
             await ctx.replyWithChatAction("record_voice");
             void draft.send("", { kind: "voice", text: "Recording a voice response…" });
@@ -204,7 +205,7 @@ export function createRunLlmReply(opts: {
 
       // Resolve the user's selected model + token quota for this turn.
       const billAcc = tenant.userId ? deps.billing.getAccount(tenant.userId) : undefined;
-      const modelId = billAcc?.modelId ?? deps.defaultModelId;
+      const modelId = billAcc?.modelId ?? deps.llm.defaultModelId;
       // The user message was already persisted to chatLog above, so historyFor
       // already includes it. Do not append userItem again.
       const inputItems: ResponseInputItem[] = contextFor(tenant, modelId);
@@ -350,7 +351,8 @@ export function createRunLlmReply(opts: {
       }
 
       const shouldVoice =
-        deps.speech.isTtsAvailable() && (voiceReplyMode === "always" || Boolean(leakedVoice));
+        deps.speech.isTtsAvailable(tenant.chatId) &&
+        (voiceReplyMode === "always" || Boolean(leakedVoice));
       if (
         preparedVoiceMessages.length === 0 &&
         preparedStickers.length === 0 &&
@@ -362,7 +364,8 @@ export function createRunLlmReply(opts: {
         const audioBuffer = await deps.speech.synthesize(
           text,
           leakedSynthesisOptions,
-          controller.signal
+          controller.signal,
+          tenant.chatId
         );
         const durationSeconds = audioBuffer ? oggOpusDurationSeconds(audioBuffer) : 0;
         if (audioBuffer && durationSeconds >= 0.1) {

@@ -25,10 +25,7 @@ function rejectUnlessOwner(
 }
 
 function scheduleProcessRestart(userId: number): void {
-  log.warn(
-    { userId, delayMs: 750 },
-    "Owner requested process restart after config save"
-  );
+  log.warn({ userId, delayMs: 750 }, "Owner requested process restart after config save");
   setTimeout(() => {
     log.info("Exiting so the process manager can reload the new config");
     process.exit(0);
@@ -134,8 +131,7 @@ export function buildAdminRoutes(ctx: ModuleContext): PanelRoute[] {
             content: source.content,
             sections: listTopLevelKeys(source.content),
             restartRequired: true,
-            note:
-              "Most settings apply only after Skye restarts. Secrets (bot token, API keys) are visible to the primary owner.",
+            note: "Most settings apply only after Skye restarts. Secrets (bot token, API keys) are visible to the primary owner.",
           });
         } catch (e) {
           const status = (e as { status?: number }).status ?? 500;
@@ -171,11 +167,13 @@ export function buildAdminRoutes(ctx: ModuleContext): PanelRoute[] {
       handler: (req, res) => {
         const panelReq = req as PanelRequest;
         if (rejectUnlessOwner(ctx, panelReq, res)) return;
-        const body = req.body as {
-          content?: unknown;
-          etag?: unknown;
-          restart?: unknown;
-        } | undefined;
+        const body = req.body as
+          | {
+              content?: unknown;
+              etag?: unknown;
+              restart?: unknown;
+            }
+          | undefined;
         if (typeof body?.content !== "string") {
           res.status(400).json({ error: "content must be a YAML string" });
           return;

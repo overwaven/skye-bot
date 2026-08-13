@@ -16,26 +16,32 @@ export function serializeChatConfig(mode: VoiceReplyMode): {
 export function buildRoutes(ctx: ModuleContext): PanelRoute[] {
   const chatConfig = ctx.services.get("chatConfig");
   const audit = () => (ctx.services.has("audit") ? ctx.services.get("audit") : null);
+  const chatFor = (req: PanelRequest, requested: unknown): number | null => {
+    const userId = req.initData.user.id;
+    const chatId = Number(requested ?? userId);
+    if (!Number.isSafeInteger(chatId)) return null;
+    if (chatId === userId || ctx.services.get("admin").isAdmin(userId)) return chatId;
+    const seen = getDb()
+      .prepare<
+        [number, number],
+        { found: number }
+      >("SELECT 1 AS found FROM request_logs WHERE user_id = ? AND chat_id = ? LIMIT 1")
+      .get(userId, chatId);
+    return seen ? chatId : null;
+  };
 
   return [
     {
       method: "get",
       path: "/chat-config",
       handler: (req, res) => {
-        const userId = (req as PanelRequest).tenant.userId!;
-        const row = getDb()
-          .prepare<[number], { chatId: number }>(
-            `SELECT DISTINCT rl.chat_id AS chatId
-             FROM request_logs rl
-             WHERE rl.user_id = ? LIMIT 1`
-          )
-          .get(userId);
-
-        if (!row) {
-          res.json(serializeChatConfig("text"));
+        const panelReq = req as PanelRequest;
+        const chatId = chatFor(panelReq, req.query.chatId);
+        if (chatId === null) {
+          res.status(403).json({ error: "This chat is not available to you" });
           return;
         }
-        const cfg = chatConfig.get(row.chatId);
+        const cfg = chatConfig.get(chatId);
         res.json(serializeChatConfig(cfg.voiceReplyMode));
       },
     },
@@ -44,7 +50,11 @@ export function buildRoutes(ctx: ModuleContext): PanelRoute[] {
       path: "/chat-config",
       handler: (req, res) => {
         const userId = (req as PanelRequest).tenant.userId!;
-        const body = req.body as { voiceReplyMode?: unknown; voiceMode?: boolean };
+        const body = req.body as {
+          voiceReplyMode?: unknown;
+          voiceMode?: boolean;
+          chatId?: unknown;
+        };
         const requestedMode: VoiceReplyMode | undefined = isVoiceReplyMode(body.voiceReplyMode)
           ? body.voiceReplyMode
           : typeof body.voiceMode === "boolean"
@@ -58,29 +68,24 @@ export function buildRoutes(ctx: ModuleContext): PanelRoute[] {
           return;
         }
 
-        const row = getDb()
-          .prepare<
-            [number],
-            { chatId: number }
-          >(`SELECT DISTINCT chat_id AS chatId FROM request_logs WHERE user_id = ? LIMIT 1`)
-          .get(userId);
+        const chatId = chatFor(req as PanelRequest, body.chatId);
 
-        if (row) {
+        if (chatId !== null) {
           if (requestedMode !== undefined) {
-            chatConfig.setVoiceReplyMode(row.chatId, requestedMode);
+            chatConfig.setVoiceReplyMode(chatId, requestedMode);
           }
-          const cfg = chatConfig.get(row.chatId);
+          const cfg = chatConfig.get(chatId);
           if (requestedMode !== undefined) {
             audit()?.event({
               action: "voice_mode_changed",
               userId,
-              chatId: row.chatId,
+              chatId,
               details: { mode: cfg.voiceReplyMode },
             });
           }
           res.json(serializeChatConfig(cfg.voiceReplyMode));
         } else {
-          res.json(serializeChatConfig(requestedMode ?? "text"));
+          res.status(403).json({ error: "This chat is not available to you" });
         }
       },
     },

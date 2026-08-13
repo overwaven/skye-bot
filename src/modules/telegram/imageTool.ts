@@ -44,7 +44,7 @@ export function createGenerateImageTool(opts: {
       const referenceCount = references.length;
 
       try {
-        const buffer = await deps.llm.generateImage(prompt, referenceUrls, signal);
+        const buffer = await deps.llm.generateImage(prompt, referenceUrls, signal, tenant.chatId);
         if (!buffer) {
           storeConversation(
             tenant,
@@ -122,7 +122,12 @@ export function createRunImageEditCommand(opts: {
         const photoUrl = `https://api.telegram.org/file/bot${deps.botToken}/${file.file_path}`;
         photoUrls = [await toDataUrl(photoUrl, 60_000, deps.maxAttachmentBytes)];
       }
-      const buffer = await deps.llm.generateImage(prompt, photoUrls, AbortSignal.timeout(180_000));
+      const buffer = await deps.llm.generateImage(
+        prompt,
+        photoUrls,
+        AbortSignal.timeout(180_000),
+        tenant.chatId
+      );
 
       if (!buffer) {
         await sendRichReply(ctx, "_No image was generated._ Try a different prompt.");
@@ -279,7 +284,8 @@ export function registerImageControlCallbacks(opts: {
         const buffer = await deps.llm.generateImage(
           nextPrompt,
           sourceImageUrl ? [sourceImageUrl] : undefined,
-          signal
+          signal,
+          tenant.chatId
         );
         signal.throwIfAborted();
         if (!buffer) {

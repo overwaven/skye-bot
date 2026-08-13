@@ -47,6 +47,113 @@ export interface ChatConfig {
   voiceReplyMode: VoiceReplyMode
 }
 
+export type ProviderKind =
+  | "openai"
+  | "openrouter"
+  | "xai"
+  | "perplexity"
+  | "openai-compatible"
+
+export type ModelCapability =
+  | "text"
+  | "vision"
+  | "image_generation"
+  | "image_edit"
+  | "tts"
+  | "stt"
+
+export interface AiModelConfig {
+  apiMode?: "responses" | "chat-completions"
+  aspectRatio?: string
+  resolution?: "1k" | "2k" | ""
+  voice?: string
+  voices?: string[]
+  language?: string
+  audioFormat?: "mp3" | "wav" | "pcm" | "oggopus"
+  expressive?: boolean
+}
+
+export interface AiModelRecord {
+  id: string
+  providerId: string
+  providerName?: string
+  name: string
+  upstreamId: string
+  capabilities: ModelCapability[]
+  contextWindow: number
+  multiplier: number
+  enabled: boolean
+  config: AiModelConfig
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AiProviderRecord {
+  id: string
+  name: string
+  kind: ProviderKind
+  baseUrl: string
+  enabled: boolean
+  status: "untested" | "ready" | "error" | "disabled"
+  hasApiKey: boolean
+  lastError: string | null
+  testedAt: string | null
+  createdAt: string
+  updatedAt: string
+  models: AiModelRecord[]
+}
+
+export interface AiRouting {
+  textModelId: string | null
+  imageGenerationModelId: string | null
+  imageEditModelId: string | null
+  ttsModelId: string | null
+  sttModelId: string | null
+  ttsVoice: string | null
+}
+
+export interface AiCatalog {
+  configured: boolean
+  chatId: number
+  chats: Array<{ chatId: number; name: string; type: string }>
+  routing: AiRouting
+  overrides: AiRouting
+  defaults: AiRouting
+  models: AiModelRecord[]
+  canManageProviders: boolean
+}
+
+export interface ProviderAdminResponse {
+  providers: AiProviderRecord[]
+  defaults: AiRouting
+  onboardingRequired: boolean
+}
+
+export interface DiscoveredAiModel {
+  upstreamId: string
+  name: string
+  capabilities: ModelCapability[]
+  contextWindow?: number
+}
+
+export interface ProviderInput {
+  name: string
+  kind: ProviderKind
+  baseUrl: string
+  apiKey?: string
+  enabled?: boolean
+}
+
+export interface AiModelInput {
+  name: string
+  upstreamId: string
+  capabilities: ModelCapability[]
+  contextWindow?: number
+  multiplier?: number
+  enabled?: boolean
+  config?: AiModelConfig
+}
+
 export interface CustomConnector {
   id: number
   name: string
@@ -313,8 +420,9 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(config),
     }),
-  getChatConfig: () => request<ChatConfig>("/chat-config"),
-  updateChatConfig: (config: ChatConfig) =>
+  getChatConfig: (chatId?: number) =>
+    request<ChatConfig>(`/chat-config${chatId === undefined ? "" : `?chatId=${chatId}`}`),
+  updateChatConfig: (config: ChatConfig & { chatId?: number }) =>
     request<ChatConfig>("/chat-config", {
       method: "PUT",
       body: JSON.stringify(config),
@@ -420,4 +528,49 @@ export const api = {
   cancelSubscription: () =>
     request<{ ok: true }>("/billing/cancel", { method: "POST" }),
   getBillingEvents: () => request<BillingEvent[]>("/billing/events"),
+  getAiCatalog: (chatId?: number) =>
+    request<AiCatalog>(`/ai/catalog${chatId === undefined ? "" : `?chatId=${chatId}`}`),
+  updateAiRouting: (chatId: number, patch: Partial<AiRouting>) =>
+    request<{ routing: AiRouting; overrides: AiRouting }>(`/ai/routing/${chatId}`, {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
+  getProviders: () => request<ProviderAdminResponse>("/admin/providers"),
+  createProvider: (input: ProviderInput) =>
+    request<AiProviderRecord>("/admin/providers", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateProvider: (id: string, input: ProviderInput) =>
+    request<AiProviderRecord>(`/admin/providers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  deleteProvider: (id: string) =>
+    request<null>(`/admin/providers/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  testProvider: (id: string) =>
+    request<{ ok: boolean; error?: string }>(`/admin/providers/${encodeURIComponent(id)}/test`, {
+      method: "POST",
+    }),
+  discoverProviderModels: (id: string) =>
+    request<{ models: DiscoveredAiModel[] }>(
+      `/admin/providers/${encodeURIComponent(id)}/discover`
+    ),
+  createProviderModel: (providerId: string, input: AiModelInput) =>
+    request<AiModelRecord>(`/admin/providers/${encodeURIComponent(providerId)}/models`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateProviderModel: (id: string, input: AiModelInput) =>
+    request<AiModelRecord>(`/admin/models/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  deleteProviderModel: (id: string) =>
+    request<null>(`/admin/models/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  updateAiDefaults: (patch: Partial<AiRouting>) =>
+    request<{ defaults: AiRouting }>("/admin/ai-defaults", {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
 }

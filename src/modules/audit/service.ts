@@ -94,7 +94,10 @@ export function logActivity(entry: AuditActivity): void {
   }
 }
 
-export function pruneAuditLog(retentionDays: number, maxRows: number): { byAge: number; byCount: number } {
+export function pruneAuditLog(
+  retentionDays: number,
+  maxRows: number
+): { byAge: number; byCount: number } {
   const db = getDb();
   const byAge = db
     .prepare(`DELETE FROM request_logs WHERE ts < datetime('now', '-${retentionDays} days')`)
@@ -114,7 +117,10 @@ export function pruneAuditLog(retentionDays: number, maxRows: number): { byAge: 
        WHERE id NOT IN (SELECT id FROM audit_events ORDER BY id DESC LIMIT ${maxRows})`
     )
     .run();
-  return { byAge: byAge.changes + eventsByAge.changes, byCount: byCount.changes + eventsByCount.changes };
+  return {
+    byAge: byAge.changes + eventsByAge.changes,
+    byCount: byCount.changes + eventsByCount.changes,
+  };
 }
 
 export function scheduleAuditPruning(retentionDays: number, maxRows: number): void {

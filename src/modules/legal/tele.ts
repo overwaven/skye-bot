@@ -48,9 +48,13 @@ export function buildLegalCommands(deps: LegalDeps): TelegramCommand[] {
       description: "Terms of Service",
       public: true,
       handler: async (ctx) => {
-        await sendRichReply(ctx, "## Terms of Service\n\nOpen the full document with the button below.", {
-          reply_markup: new InlineKeyboard().url("Open Terms", cfg.terms_url),
-        });
+        await sendRichReply(
+          ctx,
+          "## Terms of Service\n\nOpen the full document with the button below.",
+          {
+            reply_markup: new InlineKeyboard().url("Open Terms", cfg.terms_url),
+          }
+        );
       },
     },
     {

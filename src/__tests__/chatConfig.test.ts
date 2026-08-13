@@ -55,7 +55,9 @@ describe("voice reply mode migration", () => {
     migrations.find((migration) => migration.id === "006-flexible-voice-replies")!.up(db);
 
     const rows = db
-      .prepare("SELECT chat_id AS chatId, voice_reply_mode AS mode FROM chat_configs ORDER BY chat_id")
+      .prepare(
+        "SELECT chat_id AS chatId, voice_reply_mode AS mode FROM chat_configs ORDER BY chat_id"
+      )
       .all() as { chatId: number; mode: string }[];
     expect(rows).toEqual([
       { chatId: 1, mode: "text" },
@@ -65,9 +67,7 @@ describe("voice reply mode migration", () => {
     db.prepare("UPDATE chat_configs SET voice_reply_mode = 'auto' WHERE chat_id = 1").run();
     migrations.find((migration) => migration.id === "006-flexible-voice-replies")!.up(db);
     expect(
-      db
-        .prepare("SELECT voice_reply_mode AS mode FROM chat_configs WHERE chat_id = 1")
-        .get()
+      db.prepare("SELECT voice_reply_mode AS mode FROM chat_configs WHERE chat_id = 1").get()
     ).toEqual({ mode: "auto" });
     db.close();
   });

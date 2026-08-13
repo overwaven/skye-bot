@@ -201,11 +201,7 @@ export function validateConfigYaml(
     warnings.push("voice.provider=yandex but voice.yc_api_key is unset");
   }
 
-  if (
-    cfg.voice?.provider === "xai" &&
-    !cfg.voice.xai?.api_key &&
-    !cfg.xai_api_key
-  ) {
+  if (cfg.voice?.provider === "xai" && !cfg.voice.xai?.api_key && !cfg.xai_api_key) {
     warnings.push("voice.provider=xai but voice.xai.api_key and xai_api_key are unset");
   }
 
@@ -241,9 +237,7 @@ export interface WriteConfigResult {
 export function writeConfigSource(options: WriteConfigOptions): WriteConfigResult {
   const validation = validateConfigYaml(options.content, options.modules);
   if (!validation.ok) {
-    const detail = validation.issues
-      .map((i) => `${i.path}: ${i.message}`)
-      .join("; ");
+    const detail = validation.issues.map((i) => `${i.path}: ${i.message}`).join("; ");
     throw Object.assign(new Error(`Invalid configuration: ${detail}`), {
       status: 400,
       issues: validation.issues,
@@ -259,9 +253,7 @@ export function writeConfigSource(options: WriteConfigOptions): WriteConfigResul
   const current = readConfigSource();
   if (current.etag !== options.etag) {
     throw Object.assign(
-      new Error(
-        "Config changed on disk since you loaded it. Reload and re-apply your edits."
-      ),
+      new Error("Config changed on disk since you loaded it. Reload and re-apply your edits."),
       { status: 409 }
     );
   }

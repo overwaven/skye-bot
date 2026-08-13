@@ -84,9 +84,7 @@ describe("unwrapTextEnvelope", () => {
 describe("parseVoiceToolPayload", () => {
   test("parses send_voice-shaped JSON including optional directions", () => {
     expect(
-      parseVoiceToolPayload(
-        '{"text":"Hello","voice":"eve","style":"soft","scene":"Quiet room"}'
-      )
+      parseVoiceToolPayload('{"text":"Hello","voice":"eve","style":"soft","scene":"Quiet room"}')
     ).toEqual({
       text: "Hello",
       voice: "eve",

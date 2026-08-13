@@ -175,7 +175,8 @@ export function buildTelegramCommands(opts: {
           const buffer = await deps.llm.generateImage(
             prompt,
             undefined,
-            AbortSignal.timeout(180_000)
+            AbortSignal.timeout(180_000),
+            tenant.chatId
           );
 
           if (!buffer) {
@@ -275,7 +276,7 @@ export function buildTelegramCommands(opts: {
       handler: async (ctx, tenant) => {
         const chatCfg = deps.chatConfig.get(tenant.chatId);
         const billAcc = tenant.userId ? deps.billing.getAccount(tenant.userId) : undefined;
-        const modelEntry = deps.llm.resolveModel(billAcc?.modelId ?? deps.defaultModelId);
+        const modelEntry = deps.llm.resolveModel(billAcc?.modelId ?? deps.llm.defaultModelId);
         const connectorTools = tenant.userId ? await deps.connectors.toolsFor(tenant.userId) : [];
         const vision = deps.llm.supportsImages();
         const memoryCount = deps.memory.list(tenant.chatId).length;
@@ -307,10 +308,10 @@ export function buildTelegramCommands(opts: {
               : "—"
           } |`,
           `| **Vision** | ${vision === true ? yes : vision === false ? no : warn + " unknown"} |`,
-          `| **Voice input** | ${deps.speech.isSttAvailable() ? yes : no} |`,
+          `| **Voice input** | ${deps.speech.isSttAvailable(tenant.chatId) ? yes : no} |`,
           `| **Voice replies** | ${chatCfg.voiceReplyMode} |`,
           `| **Agent** | ${activeAgent?.name ?? "Default Skye"}${customPrompt ? " + addendum" : ""} |`,
-          `| **TTS** | ${deps.speech.isTtsAvailable() ? yes : no} |`,
+          `| **TTS** | ${deps.speech.isTtsAvailable(tenant.chatId) ? yes : no} |`,
           `| **Memories** | ${memoryCount} |`,
           `| **Context items** | ${ctxCount} |`,
           `| **Connector tools** | ${connectorTools.length} |`,
@@ -327,11 +328,12 @@ export function buildTelegramCommands(opts: {
       handler: async (ctx, tenant) => {
         const connectorTools = await deps.connectors.detailedToolsFor(tenant.userId);
         const displayedBuiltinTools = [...getBuiltinTools()];
-        if (deps.speech.isTtsAvailable()) {
+        if (deps.speech.isTtsAvailable(tenant.chatId)) {
           displayedBuiltinTools.push(
             createSendVoiceTool({
               speech: deps.speech,
               mode: deps.chatConfig.get(tenant.chatId).voiceReplyMode,
+              chatId: tenant.chatId,
               onPrepared: () => {},
             })
           );

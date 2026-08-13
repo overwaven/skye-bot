@@ -28,7 +28,7 @@ export const billingModule: SkyeModule = {
       baseQuotaTokens: c.billing.base_quota_tokens,
       periodSeconds: c.billing.subscription_period_seconds,
     };
-    const billing = new BillingService(billingConfig, llm.defaultModelId);
+    const billing = new BillingService(billingConfig, () => llm.defaultModelId);
     ctx.services.set("billing", billing);
 
     const deps: BillingDeps = {

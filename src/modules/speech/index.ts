@@ -19,7 +19,8 @@ export const speechModule: SkyeModule = {
   configSchema: speechConfigSchema,
   init(ctx) {
     const provider = buildProvider(ctx.config);
-    return { service: new SpeechService(provider) };
+    const providers = ctx.services?.has("providers") ? ctx.services.get("providers") : undefined;
+    return { service: new SpeechService(provider, providers) };
   },
 };
 
@@ -67,10 +68,7 @@ export function buildProvider(config: SkyeConfig): SpeechProvider {
   if (voice.provider === "xai") {
     const x = voice.xai;
     const apiKey = x.api_key || config.xai_api_key || "";
-    const baseUrl = (x.base_url || config.xai_base_url || "https://api.x.ai/v1").replace(
-      /\/$/,
-      ""
-    );
+    const baseUrl = (x.base_url || config.xai_base_url || "https://api.x.ai/v1").replace(/\/$/, "");
 
     return new XaiSpeechProvider({
       apiKey,

@@ -20,9 +20,7 @@ export const channelModule: SkyeModule = {
     const c = ctx.config.channel;
 
     if (c.enabled && !c.chat_id.trim()) {
-      log.warn(
-        "Channel module is enabled but channel.chat_id is empty — set it in config.yaml"
-      );
+      log.warn("Channel module is enabled but channel.chat_id is empty — set it in config.yaml");
     }
 
     const channelChatId = resolveChannelChatId(c.chat_id);

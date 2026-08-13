@@ -36,7 +36,8 @@ export function createSendStickerTool(options: SendStickerToolOptions): ToolDefi
       properties: {
         sticker_id: {
           type: "string",
-          description: "ID of a sticker from this chat's catalog (see list_stickers / system prompt).",
+          description:
+            "ID of a sticker from this chat's catalog (see list_stickers / system prompt).",
         },
       },
       required: ["sticker_id"],

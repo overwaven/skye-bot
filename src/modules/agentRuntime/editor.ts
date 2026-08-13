@@ -53,9 +53,7 @@ export function formatAgentsList(options: {
     `| | |`,
     `|---|---|`,
     `| **Active** | ${options.activeName} |`,
-    ...(options.privateChat
-      ? [`| **Primary** | ${options.primaryName ?? "Default Skye"} |`]
-      : []),
+    ...(options.privateChat ? [`| **Primary** | ${options.primaryName ?? "Default Skye"} |`] : []),
     "",
     ...(options.lines.length > 0 ? options.lines : ["_No agents in this library yet._"]),
     ...(options.templateLines.length > 0
@@ -145,8 +143,7 @@ export function applyFieldValue(
   if (!/^[a-z][a-z0-9_-]{0,31}$/.test(text) || text.startsWith("my_") || text.startsWith("chat_")) {
     return {
       ok: false,
-      error:
-        'Id must be lowercase, start with a letter, and not use the `my_` or `chat_` prefix.',
+      error: "Id must be lowercase, start with a letter, and not use the `my_` or `chat_` prefix.",
     };
   }
   return {

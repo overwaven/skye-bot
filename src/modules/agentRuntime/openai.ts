@@ -386,9 +386,7 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
   private providerFor(entry: ModelEntry): OpenAIProvider {
     if (entry.provider === "xai") {
       if (!this.xaiProvider) {
-        throw new Error(
-          'A model with provider: "xai" is configured but xai_api_key is not set.'
-        );
+        throw new Error('A model with provider: "xai" is configured but xai_api_key is not set.');
       }
       return this.xaiProvider;
     }

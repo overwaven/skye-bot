@@ -6,6 +6,8 @@ import type {
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions.js";
 import type { ModelEntry } from "./config.js";
 import { log } from "../../utils/log.js";
+import type { ProviderService } from "../providers/service.js";
+import type { ResolvedAiModel } from "../providers/types.js";
 
 export type { ResponseInputItem, ResponseFunctionToolCall };
 
@@ -28,6 +30,7 @@ export interface LlmModuleSettings {
   perplexityBaseUrl: string;
   xaiApiKey?: string;
   xaiBaseUrl: string;
+  providers?: ProviderService;
 }
 
 export interface LlmUsage {
@@ -263,19 +266,27 @@ function convertContent(content: any): any {
       return "";
     }
   }
-  return content.map((part: { type: string; text?: string; image_url?: string; file_data?: string; filename?: string }) => {
-    if (part.type === "input_text") return { type: "text", text: part.text };
-    if (part.type === "input_image" && part.image_url) {
-      return { type: "image_url", image_url: { url: part.image_url } };
+  return content.map(
+    (part: {
+      type: string;
+      text?: string;
+      image_url?: string;
+      file_data?: string;
+      filename?: string;
+    }) => {
+      if (part.type === "input_text") return { type: "text", text: part.text };
+      if (part.type === "input_image" && part.image_url) {
+        return { type: "image_url", image_url: { url: part.image_url } };
+      }
+      if (part.type === "input_file" && part.file_data) {
+        return {
+          type: "file",
+          file: { filename: part.filename ?? "document", file_data: part.file_data },
+        };
+      }
+      return part;
     }
-    if (part.type === "input_file" && part.file_data) {
-      return {
-        type: "file",
-        file: { filename: part.filename ?? "document", file_data: part.file_data },
-      };
-    }
-    return part;
-  });
+  );
 }
 
 /** Convert ResponseInputItem[] + instructions → ChatCompletionMessageParam[]. */
@@ -348,27 +359,44 @@ function toChatMessages(
  * real provider id and token multiplier are configured by the operator.
  */
 export class LlmClient {
-  readonly models: readonly ModelEntry[];
   private readonly modelById: Map<string, ModelEntry>;
-  readonly defaultModelId: string;
   private defaultClient: OpenAI;
   private perplexityClient: OpenAI | null = null;
   private xaiClient: OpenAI | null = null;
+  private providerClients = new Map<string, { updatedAt: string; client: OpenAI }>();
 
   constructor(public readonly settings: LlmModuleSettings) {
-    this.models = settings.models;
     this.modelById = new Map(settings.models.map((m) => [m.id, m]));
-    this.defaultModelId = settings.defaultModelId;
     this.defaultClient = new OpenAI({
       baseURL: settings.baseUrl,
-      apiKey: settings.apiKey,
+      apiKey: settings.apiKey || "not-configured",
     });
+  }
+
+  get models(): readonly ModelEntry[] {
+    const runtime = this.settings.providers?.textCatalog() ?? [];
+    if (this.settings.providers?.hasProviders()) return runtime;
+    return this.settings.apiKey || this.settings.xaiApiKey || this.settings.perplexityApiKey
+      ? this.settings.models
+      : [];
+  }
+
+  get defaultModelId(): string {
+    if (this.settings.providers?.hasProviders()) {
+      return this.settings.providers.getRouting().textModelId ?? this.models[0]?.id ?? "";
+    }
+    return this.models.length > 0 ? this.settings.defaultModelId : "";
   }
 
   /** Resolve a masked model id to its catalog entry, falling back to default. */
   resolveModel(modelId?: string): ModelEntry {
-    const fallback = this.settings.models[0];
+    const catalog = this.models;
+    const fallback = catalog.find((model) => model.id === this.defaultModelId) ?? catalog[0];
+    if (!fallback) throw new Error("No text model is configured. Complete AI setup in the panel.");
     if (!modelId) return fallback;
+    if (this.settings.providers?.hasProviders()) {
+      return catalog.find((model) => model.id === modelId) ?? fallback;
+    }
     return this.modelById.get(modelId) ?? fallback;
   }
 
@@ -380,12 +408,28 @@ export class LlmClient {
    */
   usesChatCompletions(entry?: ModelEntry): boolean {
     const resolved = entry ?? this.resolveModel();
+    if (resolved.apiMode) return resolved.apiMode === "chat-completions";
     if (resolved.provider === "perplexity" || resolved.provider === "xai") return false;
     return this.settings.useChatCompletions;
   }
 
   /** Get the OpenAI SDK client for a model's provider. */
   private clientFor(entry: ModelEntry): OpenAI {
+    if (entry.providerId && this.settings.providers) {
+      const resolved = this.settings.providers.resolveModel(entry.id);
+      if (!resolved) throw new Error(`The provider for model "${entry.name}" is unavailable.`);
+      const cached = this.providerClients.get(resolved.provider.id);
+      if (cached?.updatedAt === resolved.provider.updatedAt) return cached.client;
+      const client = new OpenAI({
+        baseURL: resolved.provider.baseUrl,
+        apiKey: resolved.provider.apiKey,
+      });
+      this.providerClients.set(resolved.provider.id, {
+        updatedAt: resolved.provider.updatedAt,
+        client,
+      });
+      return client;
+    }
     if (entry.provider === "perplexity") {
       if (!this.perplexityClient) {
         if (!this.settings.perplexityApiKey) {
@@ -403,9 +447,7 @@ export class LlmClient {
     if (entry.provider === "xai") {
       if (!this.xaiClient) {
         if (!this.settings.xaiApiKey) {
-          throw new Error(
-            'A model with provider: "xai" is configured but xai_api_key is not set.'
-          );
+          throw new Error('A model with provider: "xai" is configured but xai_api_key is not set.');
         }
         this.xaiClient = new OpenAI({
           baseURL: this.settings.xaiBaseUrl,
@@ -422,7 +464,8 @@ export class LlmClient {
     const sources: PerplexitySource[] = [];
     for (const item of output) {
       if (item.type !== "search_results") continue;
-      const results = (item as { results?: Array<{ id?: number; title?: string; url?: string }> }).results;
+      const results = (item as { results?: Array<{ id?: number; title?: string; url?: string }> })
+        .results;
       if (!Array.isArray(results)) continue;
       for (const r of results) {
         if (r.url) sources.push({ id: r.id ?? sources.length + 1, title: r.title, url: r.url });
@@ -432,11 +475,7 @@ export class LlmClient {
   }
 
   /** One-shot non-streaming call. */
-  async ask(
-    instructions: string,
-    input: string,
-    modelId?: string
-  ): Promise<LlmResponse> {
+  async ask(instructions: string, input: string, modelId?: string): Promise<LlmResponse> {
     const entry = this.resolveModel(modelId);
     const client = this.clientFor(entry);
     if (this.usesChatCompletions(entry)) {
@@ -570,18 +609,25 @@ export class LlmClient {
   async checkCapabilities(): Promise<void> {
     try {
       const entry = this.resolveModel(this.defaultModelId);
-      const baseUrl =
-        entry.provider === "perplexity"
+      const runtime = entry.providerId ? this.settings.providers?.resolveModel(entry.id) : null;
+      const baseUrl = runtime
+        ? runtime.provider.baseUrl
+        : entry.provider === "perplexity"
           ? this.settings.perplexityBaseUrl
           : entry.provider === "xai"
             ? this.settings.xaiBaseUrl
             : this.settings.baseUrl;
-      const apiKey =
-        entry.provider === "perplexity"
+      const apiKey = runtime
+        ? runtime.provider.apiKey
+        : entry.provider === "perplexity"
           ? this.settings.perplexityApiKey
           : entry.provider === "xai"
             ? this.settings.xaiApiKey
             : this.settings.apiKey;
+      if (!apiKey) {
+        log.info("No text provider is configured yet; complete setup in the panel");
+        return;
+      }
       const res = await fetch(`${baseUrl}/models`, {
         headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
       });
@@ -590,9 +636,7 @@ export class LlmClient {
         return;
       }
       const data = await res.json();
-      const ids = new Set(
-        (data.data as { id: string }[])?.map((m) => m.id) ?? []
-      );
+      const ids = new Set((data.data as { id: string }[])?.map((m) => m.id) ?? []);
       const found = (data.data as { id: string; architecture?: { modality?: string } }[])?.find(
         (m) => m.id === entry.model
       );
@@ -600,7 +644,10 @@ export class LlmClient {
         const modality = found.architecture?.modality ?? "";
         // xAI Grok chat models accept image inputs even when modality metadata is absent.
         this.supportsImagesCache =
-          entry.provider === "xai" || modality.toLowerCase().includes("image");
+          runtime?.model.capabilities.includes("vision") === true ||
+          runtime?.provider.kind === "xai" ||
+          entry.provider === "xai" ||
+          modality.toLowerCase().includes("image");
         log.info(
           `Model "${entry.model}" image support: ${this.supportsImagesCache} (modality: "${modality}")`
         );
@@ -624,9 +671,7 @@ export class LlmClient {
    * Build the OpenRouter `plugins` parameter for file parsing, but only if
    * the input contains file parts. Returns an object to spread or undefined.
    */
-  private buildPluginsParam(
-    input: ResponseInputItem[]
-  ): { plugins: unknown[] } | undefined {
+  private buildPluginsParam(input: ResponseInputItem[]): { plugins: unknown[] } | undefined {
     if (!this.settings.pdfEngine) return undefined;
     const hasFile = input.some((item) => {
       const m = item as { type?: string; content?: unknown };
@@ -649,12 +694,16 @@ export class LlmClient {
   async generateImage(
     prompt: string,
     imageUrls?: string[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    chatId?: number
   ): Promise<Buffer | null> {
-    if (this.resolveImageProvider() === "xai") {
-      return this.generateImageViaXai(prompt, imageUrls, signal);
+    const capability = imageUrls?.length ? "image_edit" : "image_generation";
+    const runtime = this.settings.providers?.resolve(capability, chatId) ?? null;
+    if (this.settings.providers?.hasProviders() && !runtime) return null;
+    if (runtime?.provider.kind === "xai" || (!runtime && this.resolveImageProvider() === "xai")) {
+      return this.generateImageViaXai(prompt, imageUrls, signal, runtime);
     }
-    return this.generateImageViaOpenRouter(prompt, imageUrls, signal);
+    return this.generateImageViaOpenRouter(prompt, imageUrls, signal, runtime);
   }
 
   private resolveImageProvider(): "openrouter" | "xai" {
@@ -666,10 +715,15 @@ export class LlmClient {
     return "openrouter";
   }
 
-  private imageAuth(): { apiKey: string; baseUrl: string } {
+  private imageAuth(runtime?: ResolvedAiModel | null): { apiKey: string; baseUrl: string } {
+    if (runtime) {
+      return {
+        apiKey: runtime.provider.apiKey,
+        baseUrl: runtime.provider.baseUrl.replace(/\/$/, ""),
+      };
+    }
     if (this.resolveImageProvider() === "xai") {
-      const apiKey =
-        this.settings.imageApiKey || this.settings.xaiApiKey || this.settings.apiKey;
+      const apiKey = this.settings.imageApiKey || this.settings.xaiApiKey || this.settings.apiKey;
       const baseUrl =
         this.settings.imageBaseUrl || this.settings.xaiBaseUrl || "https://api.x.ai/v1";
       return { apiKey, baseUrl: baseUrl.replace(/\/$/, "") };
@@ -683,12 +737,50 @@ export class LlmClient {
   private async generateImageViaOpenRouter(
     prompt: string,
     imageUrls?: string[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    runtime?: ResolvedAiModel | null
   ): Promise<Buffer | null> {
-    const { apiKey, baseUrl } = this.imageAuth();
+    const { apiKey, baseUrl } = this.imageAuth(runtime);
+    if (runtime && runtime.provider.kind !== "openrouter") {
+      const headers = { Authorization: `Bearer ${apiKey}` };
+      let response: Response;
+      if (imageUrls?.length) {
+        const form = new FormData();
+        form.append("model", runtime.model.upstreamId);
+        form.append("prompt", prompt);
+        const source = imageUrls[0];
+        const bytes = source.startsWith("data:")
+          ? Buffer.from(source.split(",", 2)[1] ?? "", "base64")
+          : Buffer.from(await (await fetch(source, { signal })).arrayBuffer());
+        form.append("image", new Blob([new Uint8Array(bytes)], { type: "image/png" }), "input.png");
+        response = await fetch(`${baseUrl}/images/edits`, {
+          method: "POST",
+          headers,
+          body: form,
+          signal,
+        });
+      } else {
+        response = await fetch(`${baseUrl}/images/generations`, {
+          method: "POST",
+          headers: { ...headers, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: runtime.model.upstreamId,
+            prompt,
+            response_format: "b64_json",
+          }),
+          signal,
+        });
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`Image generation failed (${response.status}): ${detail}`);
+      }
+      const data: { data?: { b64_json?: string; url?: string }[] } = await response.json();
+      return this.bufferFromImageData(data.data?.[0], signal);
+    }
 
     const body: Record<string, unknown> = {
-      model: this.settings.imageModel,
+      model: runtime?.model.upstreamId ?? this.settings.imageModel,
       prompt,
     };
     if (imageUrls && imageUrls.length > 0) {
@@ -725,24 +817,27 @@ export class LlmClient {
   private async generateImageViaXai(
     prompt: string,
     imageUrls?: string[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    runtime?: ResolvedAiModel | null
   ): Promise<Buffer | null> {
-    const { apiKey, baseUrl } = this.imageAuth();
+    const { apiKey, baseUrl } = this.imageAuth(runtime);
     if (!apiKey) {
       throw new Error('image.provider is "xai" but no xai_api_key / image.api_key is set.');
     }
 
     const refs = (imageUrls ?? []).slice(0, 3);
     const body: Record<string, unknown> = {
-      model: this.settings.imageModel || "grok-imagine-image-quality",
+      model: runtime?.model.upstreamId || this.settings.imageModel || "grok-imagine-image-quality",
       prompt,
       response_format: "b64_json",
     };
-    if (this.settings.imageAspectRatio) {
-      body.aspect_ratio = this.settings.imageAspectRatio;
+    const aspectRatio = runtime?.model.config.aspectRatio ?? this.settings.imageAspectRatio;
+    const resolution = runtime?.model.config.resolution ?? this.settings.imageResolution;
+    if (aspectRatio) {
+      body.aspect_ratio = aspectRatio;
     }
-    if (this.settings.imageResolution === "1k" || this.settings.imageResolution === "2k") {
-      body.resolution = this.settings.imageResolution;
+    if (resolution === "1k" || resolution === "2k") {
+      body.resolution = resolution;
     }
 
     let path = "/images/generations";

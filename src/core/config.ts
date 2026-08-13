@@ -1,12 +1,7 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { load as parseYaml } from "js-yaml";
-import {
-  z,
-  type ZodObject,
-  type ZodRawShape,
-  type ZodPreprocess,
-} from "zod";
+import { z, type ZodObject, type ZodRawShape, type ZodPreprocess } from "zod";
 import type { SkyeModule } from "./module.js";
 
 /**
@@ -15,9 +10,7 @@ import type { SkyeModule } from "./module.js";
  * `.default({})` doesn't re-parse the substituted value, so this preprocess
  * is the reliable way to get nested defaults.
  */
-export function section<T extends ZodRawShape>(
-  shape: T
-): ZodPreprocess<ZodObject<T>> {
+export function section<T extends ZodRawShape>(shape: T): ZodPreprocess<ZodObject<T>> {
   return z.preprocess((v) => v ?? {}, z.object(shape));
 }
 
@@ -86,9 +79,7 @@ export function loadConfig(modules: readonly SkyeModule[]): SkyeConfig {
   runtimeSchema = schema;
   const result = schema.safeParse(raw);
   if (!result.success) {
-    const issues = result.error.issues
-      .map((i) => `  ${i.path.join(".")}: ${i.message}`)
-      .join("\n");
+    const issues = result.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n");
     throw new Error(`Invalid config.yaml:\n${issues}`);
   }
 

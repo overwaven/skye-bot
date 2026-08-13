@@ -129,9 +129,10 @@ export function captureChannelPost(ctx: GrammyContext): ChannelPost | null {
 
 export function getChannelPost(chatId: number, messageId: number): ChannelPost | null {
   const row = getDb()
-    .prepare<[number, number], ChannelPostRow>(
-      "SELECT * FROM channel_posts WHERE chat_id = ? AND message_id = ?"
-    )
+    .prepare<
+      [number, number],
+      ChannelPostRow
+    >("SELECT * FROM channel_posts WHERE chat_id = ? AND message_id = ?")
     .get(chatId, messageId);
   return row ? rowToPost(row) : null;
 }
@@ -160,9 +161,10 @@ export function markChannelPostDeleted(chatId: number, messageId: number): boole
 
 export function countChannelPosts(chatId: number): number {
   const row = getDb()
-    .prepare<[number], { count: number }>(
-      "SELECT COUNT(*) AS count FROM channel_posts WHERE chat_id = ? AND deleted_at IS NULL"
-    )
+    .prepare<
+      [number],
+      { count: number }
+    >("SELECT COUNT(*) AS count FROM channel_posts WHERE chat_id = ? AND deleted_at IS NULL")
     .get(chatId);
   return row?.count ?? 0;
 }

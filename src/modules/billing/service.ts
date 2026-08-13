@@ -119,8 +119,12 @@ function rowToAccount(row: AccountRow): BillingAccount {
 export class BillingService {
   constructor(
     public readonly config: BillingConfig,
-    private readonly defaultModelId: string
+    private readonly defaultModel: string | (() => string)
   ) {}
+
+  private defaultModelId(): string {
+    return typeof this.defaultModel === "function" ? this.defaultModel() : this.defaultModel;
+  }
 
   issueInvoice(input: Omit<IssuedInvoice, "id" | "status">): IssuedInvoice {
     const invoice: IssuedInvoice = { ...input, id: randomUUID(), status: "issued" };
@@ -183,9 +187,10 @@ export class BillingService {
   }): IssuedInvoice | null {
     return getDb().transaction(() => {
       const duplicate = getDb()
-        .prepare<[string], { invoice_id: string }>(
-          "SELECT invoice_id FROM billing_payments WHERE telegram_payment_charge_id = ?"
-        )
+        .prepare<
+          [string],
+          { invoice_id: string }
+        >("SELECT invoice_id FROM billing_payments WHERE telegram_payment_charge_id = ?")
         .get(input.chargeId);
       if (duplicate)
         return duplicate.invoice_id === input.invoiceId ? this.getInvoice(input.invoiceId) : null;
@@ -243,7 +248,7 @@ export class BillingService {
          VALUES (?, ?, 'none', 0, 0, 0, 0, 0, NULL, ?, ?)
          ON CONFLICT(user_id) DO NOTHING`
       )
-      .run(userId, this.defaultModelId, now, now);
+      .run(userId, this.defaultModelId(), now, now);
     return this.readRaw(userId) as BillingAccount;
   }
 
@@ -294,7 +299,7 @@ export class BillingService {
 
   selectModel(userId: number, modelId: string): void {
     this.ensureAccount(userId);
-    const id = String(modelId || "").trim() || this.defaultModelId;
+    const id = String(modelId || "").trim() || this.defaultModelId();
     getDb()
       .prepare(`UPDATE billing_accounts SET model_id = ?, updated_at = ? WHERE user_id = ?`)
       .run(id, new Date().toISOString(), userId);

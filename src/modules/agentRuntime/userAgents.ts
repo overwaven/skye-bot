@@ -317,9 +317,10 @@ export class UserAgentService {
 
   getPrimary(ownerUserId: number): string | undefined {
     const row = this.db
-      .prepare<[number], { primaryAgentId: string | null }>(
-        `SELECT primary_agent_id AS primaryAgentId FROM user_configs WHERE user_id = ?`
-      )
+      .prepare<
+        [number],
+        { primaryAgentId: string | null }
+      >(`SELECT primary_agent_id AS primaryAgentId FROM user_configs WHERE user_id = ?`)
       .get(ownerUserId);
     if (!row?.primaryAgentId) return undefined;
     return this.get(ownerUserId, row.primaryAgentId)

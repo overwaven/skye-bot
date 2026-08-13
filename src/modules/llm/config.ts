@@ -10,6 +10,8 @@ export const modelSchema = z.object({
   multiplier: z.number().positive().default(1),
   contextWindow: z.number().int().positive().default(128_000),
   provider: z.enum(["openrouter", "perplexity", "xai"]).optional(),
+  providerId: z.string().optional(),
+  apiMode: z.enum(["responses", "chat-completions"]).optional(),
   builtinTools: z.array(builtinToolSchema).optional(),
   preset: z.string().optional(),
 });
@@ -47,7 +49,7 @@ const defaultModels: ModelEntry[] = [
 ];
 
 export const llmConfigSchema = z.object({
-  openai_key: z.string().min(1, "openai_key is required"),
+  openai_key: z.string().default(""),
   base_url: z.string().url().default("https://openrouter.ai/api/v1"),
   models: z.array(modelSchema).default(defaultModels),
   default_model_id: z.string().default("sydney"),

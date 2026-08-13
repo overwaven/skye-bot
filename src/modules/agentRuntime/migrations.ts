@@ -221,9 +221,7 @@ function migratePersonalityToPrimaryAgents(db: Database.Database): void {
       (owner_user_id, id, name, description, instructions, model_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`
   );
-  const setPrimary = db.prepare(
-    `UPDATE user_configs SET primary_agent_id = ? WHERE user_id = ?`
-  );
+  const setPrimary = db.prepare(`UPDATE user_configs SET primary_agent_id = ? WHERE user_id = ?`);
 
   for (const user of users) {
     if (user.primaryAgentId) continue;
@@ -240,15 +238,7 @@ function migratePersonalityToPrimaryAgents(db: Database.Database): void {
       : template.instructions;
     const now = new Date().toISOString();
     const id = "primary";
-    insertAgent.run(
-      user.userId,
-      id,
-      template.name,
-      template.description,
-      instructions,
-      now,
-      now
-    );
+    insertAgent.run(user.userId, id, template.name, template.description, instructions, now, now);
     setPrimary.run(id, user.userId);
   }
 }

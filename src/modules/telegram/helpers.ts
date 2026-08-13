@@ -716,11 +716,7 @@ export function createDraftManager(ctx: GrammyContext) {
             const richMessage: InputRichMessage = {
               markdown: renderDraftStatus(latestStatus, false),
             };
-            return ctx.api.editMessageText(
-              ctx.chat!.id,
-              statusMessage!.message_id,
-              richMessage
-            );
+            return ctx.api.editMessageText(ctx.chat!.id, statusMessage!.message_id, richMessage);
           })
           .then(() => undefined)
           .catch((e) => log.debug({ err: e }, "Group status update failed"));

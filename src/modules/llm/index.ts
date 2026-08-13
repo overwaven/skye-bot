@@ -32,6 +32,7 @@ export const llmModule: SkyeModule = {
       perplexityBaseUrl: c.perplexity_base_url,
       xaiApiKey: c.xai_api_key,
       xaiBaseUrl: c.xai_base_url,
+      providers: ctx.services.get("providers"),
     });
     return { service: client };
   },

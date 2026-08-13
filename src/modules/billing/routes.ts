@@ -22,8 +22,11 @@ export function buildRoutes(ctx: ModuleContext): PanelRoute[] {
       handler: (req, res) => {
         const userId = (req as PanelRequest).tenant.userId!;
         const acc = billing.getAccount(userId);
+        const modelId = llm.models.some((model) => model.id === acc.modelId)
+          ? acc.modelId
+          : llm.defaultModelId;
         res.json({
-          modelId: acc.modelId,
+          modelId,
           subStatus: acc.subStatus,
           subExpiresAt: acc.subExpiresAt,
           subPeriodStart: acc.subPeriodStart,

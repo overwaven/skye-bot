@@ -211,9 +211,7 @@ export const agentRuntimeModule: SkyeModule = {
             const library = service.libraryFor(tenant);
             const selected = service.activeProfileFor(tenant);
             const primary =
-              isPrivate(tenant) && tenant.userId
-                ? userAgents.getPrimary(tenant.userId)
-                : undefined;
+              isPrivate(tenant) && tenant.userId ? userAgents.getPrimary(tenant.userId) : undefined;
             const templates = service.templates();
             const lines = library.map((profile) => {
               const marks = [
@@ -225,8 +223,7 @@ export const agentRuntimeModule: SkyeModule = {
               return `- ${marks} **${profile.name}** (${mdCode(profile.id)}) — ${profile.description}`;
             });
             const templateLines = templates.map(
-              (profile) =>
-                `- ◇ **${profile.name}** (${mdCode(profile.id)}) — _template_`
+              (profile) => `- ◇ **${profile.name}** (${mdCode(profile.id)}) — _template_`
             );
             const markdown = formatAgentsList({
               activeName: selected?.name ?? "Default Skye",

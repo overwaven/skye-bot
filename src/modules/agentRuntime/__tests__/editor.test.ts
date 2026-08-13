@@ -18,7 +18,10 @@ const baseSession = (): Omit<AgentEditSession, "updatedAt"> => ({
 
 describe("agent editor helpers", () => {
   it("formats the editor with rich markdown", () => {
-    const markdown = formatEditEditor({ ...baseSession(), updatedAt: new Date().toISOString() }, "my_writer");
+    const markdown = formatEditEditor(
+      { ...baseSession(), updatedAt: new Date().toISOString() },
+      "my_writer"
+    );
     expect(markdown).toContain("## Editing Writer");
     expect(markdown).toContain("`my_writer`");
     expect(markdown).toContain("### Instructions");

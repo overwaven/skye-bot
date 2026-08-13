@@ -103,9 +103,10 @@ export function listStickers(chatId: number): ChatSticker[] {
 
 export function getSticker(chatId: number, id: string): ChatSticker | undefined {
   const row = getDb()
-    .prepare<[number, string], StickerRow>(
-      `SELECT ${SELECT_COLUMNS} FROM chat_stickers WHERE chat_id = ? AND id = ?`
-    )
+    .prepare<
+      [number, string],
+      StickerRow
+    >(`SELECT ${SELECT_COLUMNS} FROM chat_stickers WHERE chat_id = ? AND id = ?`)
     .get(chatId, id);
   return row ? toSticker(row) : undefined;
 }
@@ -122,9 +123,7 @@ export function findByUniqueId(chatId: number, fileUniqueId: string): ChatSticke
 
 export function countStickers(chatId: number): number {
   const row = getDb()
-    .prepare<[number], { n: number }>(
-      `SELECT COUNT(*) AS n FROM chat_stickers WHERE chat_id = ?`
-    )
+    .prepare<[number], { n: number }>(`SELECT COUNT(*) AS n FROM chat_stickers WHERE chat_id = ?`)
     .get(chatId);
   return row?.n ?? 0;
 }
@@ -173,7 +172,11 @@ export function upsertSticker(chatId: number, input: StickerInput): ChatSticker 
   }
 
   const id = requestedId || existingByUnique?.id || cryptoRandomId();
-  if (!existingById && !findByUniqueId(chatId, input.fileUniqueId) && countStickers(chatId) >= MAX_STICKERS_PER_CHAT) {
+  if (
+    !existingById &&
+    !findByUniqueId(chatId, input.fileUniqueId) &&
+    countStickers(chatId) >= MAX_STICKERS_PER_CHAT
+  ) {
     throw new Error(`This chat already has ${MAX_STICKERS_PER_CHAT} stickers.`);
   }
 

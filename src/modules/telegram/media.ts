@@ -143,10 +143,10 @@ export function createMediaHelpers(opts: {
     }
 
     // Voice in replied message
-    if (reply.voice && deps.speech.isSttAvailable()) {
+    if (reply.voice && deps.speech.isSttAvailable(ctx.chat?.id)) {
       try {
         const { buffer } = await downloadTelegramFile(reply.voice.file_id);
-        const transcript = await deps.speech.recognize(buffer);
+        const transcript = await deps.speech.recognize(buffer, "ru-RU", ctx.chat?.id);
         if (transcript) {
           parts.push({
             type: "input_text",
@@ -160,10 +160,10 @@ export function createMediaHelpers(opts: {
     }
 
     // Audio file in replied message
-    if (reply.audio && deps.speech.isSttAvailable()) {
+    if (reply.audio && deps.speech.isSttAvailable(ctx.chat?.id)) {
       try {
         const { buffer } = await downloadTelegramFile(reply.audio.file_id);
-        const transcript = await deps.speech.recognize(buffer);
+        const transcript = await deps.speech.recognize(buffer, "ru-RU", ctx.chat?.id);
         if (transcript) {
           parts.push({ type: "input_text", text: `[Replied audio transcript]\n${transcript}` });
           summaryParts.push(

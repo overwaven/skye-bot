@@ -37,7 +37,11 @@ admin_ids: ""
 # the /allow command in chat.
 allowed_ids: ""
 
-openai_key: "sk-or-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+# AI providers and models are managed live in the Mini App by the owner or an
+# administrator. The fields below are legacy bootstrap settings: on upgrade,
+# Skye imports them into the encrypted provider registry once. New installs may
+# leave openai_key empty and complete the guided setup without restarting.
+openai_key: ""
 max_completion_tokens: 500
 base_url: "https://openrouter.ai/api/v1"
 # LM Studio (or any OpenAI-compatible local server) as the default endpoint:
@@ -69,7 +73,8 @@ perplexity_base_url: "https://api.perplexity.ai/v1"
 xai_api_key: ""
 xai_base_url: "https://api.x.ai/v1"
 
-# The masked model catalog exposed to users. Each entry has a display name
+# Legacy model catalog imported into the provider registry on upgrade. Each
+# entry has a display name
 # (shown in the Mini App and /models), a real provider model id used for
 # the upstream call, and a token-cost multiplier. The underlying model id
 # is never shown to the user — only the masked name.
@@ -193,7 +198,7 @@ billing:
       stars: 2499
       tokens: 5000000
 
-# Image generation provider (used by /image and image editing).
+# Legacy image provider imported into the provider registry on upgrade.
 # Independent from chat — fill these in if your chat provider doesn't support
 # OpenRouter's chat-completions image modality (e.g. when base_url points to
 # Ollama). If left empty, falls back to base_url/openai_key above.
@@ -225,7 +230,9 @@ pdf_engine: ""
 # Maximum PDF file size to accept (bytes, default 25 MB)
 pdf_max_bytes: 26214400
 
-# Voice (speech) provider — choose between Yandex SpeechKit, OpenRouter,
+# Legacy voice provider imported where supported and kept as a compatibility
+# fallback until the first provider is configured in the Mini App.
+# Choose between Yandex SpeechKit, OpenRouter,
 # Tinfoil, and xAI. All support STT (speech-to-text) and TTS (text-to-speech).
 voice:
   # "yandex" (default), "openrouter", "tinfoil", or "xai"

@@ -18,9 +18,9 @@ describe("telegram config security limits", () => {
   });
 
   it("defaults attachment downloads to 25 MiB", () => {
-    expect(
-      telegramConfigSchema.parse({ bot_token: "token" }).telegram_max_attachment_bytes
-    ).toBe(25 * 1024 * 1024);
+    expect(telegramConfigSchema.parse({ bot_token: "token" }).telegram_max_attachment_bytes).toBe(
+      25 * 1024 * 1024
+    );
   });
 
   it("rejects attachment limits above 50 MiB", () => {
