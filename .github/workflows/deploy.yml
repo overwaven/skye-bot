@@ -78,8 +78,9 @@ jobs:
               git clone --branch "$BRANCH" https://github.com/ehlvg/skye-bot.git "$deploy_path"
             fi
 
-            cd "$deploy_path"
-            git switch "$BRANCH"
-            git pull --ff-only origin "$BRANCH"
-            SKYE_PM2_NAME="$app_name" bash scripts/deploy-pm2.sh
+          cd "$deploy_path"
+          git switch "$BRANCH"
+          git stash push --include-untracked -m "pre-deploy-$BRANCH-$(date -u +%Y%m%dT%H%M%SZ)"
+          git pull --ff-only origin "$BRANCH"
+          SKYE_PM2_NAME="$app_name" bash scripts/deploy-pm2.sh
           EOF
