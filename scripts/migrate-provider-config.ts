@@ -44,7 +44,6 @@ type RoutingRow = {
 
 const configPath = resolve(process.env.SKYE_CONFIG ?? "config.yaml");
 const config = load(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-if (config.ai) throw new Error("config.yaml already contains an ai section");
 
 const dbPath = resolve(process.cwd(), String(config.db_path ?? "data/skye.db"));
 const db = new Database(dbPath, { readonly: true });
@@ -98,7 +97,11 @@ config.ai = {
     .filter((provider) => providerIds.has(provider.id))
     .map((provider) => ({
       id: providerIds.get(provider.id),
-      name: provider.name,
+      name:
+        (provider.id === "legacy-image" || provider.id === "image") &&
+        provider.name === "Legacy image provider"
+          ? "Image API"
+          : provider.name,
       kind: provider.kind,
       base_url: provider.baseUrl,
       api_key: decryptProviderSecret(provider.apiKeyEnc, String(config.bot_token ?? "")),
@@ -137,6 +140,22 @@ config.ai = {
     voice: defaults?.voice ?? "",
   },
 };
+
+for (const key of [
+  "openai_key",
+  "base_url",
+  "models",
+  "default_model_id",
+  "use_chat_completions",
+  "perplexity_api_key",
+  "perplexity_base_url",
+  "xai_api_key",
+  "xai_base_url",
+]) {
+  delete config[key];
+}
+if (defaults?.imageGeneration || defaults?.imageEdit) delete config.image;
+if (defaults?.tts || defaults?.stt) delete config.voice;
 
 const timestamp = new Date().toISOString().replaceAll(/[:.]/g, "-");
 const backupDir = resolve(dirname(configPath), "data", "config-backups");
