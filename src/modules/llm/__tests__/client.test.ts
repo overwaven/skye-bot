@@ -160,6 +160,56 @@ describe("xAI image generation", () => {
   });
 });
 
+describe("Polza image generation", () => {
+  test("uses Media API for image editing", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: "gen_1",
+            status: "completed",
+            data: { url: "https://cdn.polza.ai/image.png" },
+          }),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(new Response("PNG", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = makeClient({
+      imageApiKey: "polza-key",
+      imageBaseUrl: "https://polza.ai/api/v1",
+      imageModel: "openai/gpt-5.4-image-2",
+      imageAspectRatio: "16:9",
+      imageResolution: "2k",
+    });
+
+    const image = await client.generateImage("make it blue", [
+      "data:image/png;base64,abc",
+      "https://example.com/reference.png",
+    ]);
+
+    expect(image?.toString()).toBe("PNG");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://polza.ai/api/v1/media");
+    expect(JSON.parse(String(init.body))).toEqual({
+      model: "openai/gpt-5.4-image-2",
+      input: {
+        prompt: "make it blue",
+        aspect_ratio: "16:9",
+        image_resolution: "2K",
+        images: [
+          { type: "base64", data: "data:image/png;base64,abc" },
+          { type: "url", data: "https://example.com/reference.png" },
+        ],
+      },
+      async: true,
+    });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("https://cdn.polza.ai/image.png");
+  });
+});
+
 describe("xAI chat provider routing", () => {
   test("resolveModel preserves provider: xai", () => {
     const client = makeClient({

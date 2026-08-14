@@ -801,6 +801,12 @@ export class LlmClient {
     runtime?: ResolvedAiModel | null
   ): Promise<Buffer | null> {
     const { apiKey, baseUrl } = this.imageAuth(runtime);
+    if (
+      runtime?.provider.kind === "polza" ||
+      (!runtime && baseUrl.toLowerCase().includes("polza.ai"))
+    ) {
+      return this.generateImageViaPolza(prompt, imageUrls, signal, runtime);
+    }
     if (runtime && runtime.provider.kind !== "openrouter") {
       const headers = { Authorization: `Bearer ${apiKey}` };
       let response: Response;
@@ -867,6 +873,84 @@ export class LlmClient {
 
     const data: { data?: { b64_json?: string; url?: string }[] } = await res.json();
     return this.bufferFromImageData(data.data?.[0], signal);
+  }
+
+  private async generateImageViaPolza(
+    prompt: string,
+    imageUrls?: string[],
+    signal?: AbortSignal,
+    runtime?: ResolvedAiModel | null
+  ): Promise<Buffer | null> {
+    const { apiKey, baseUrl } = this.imageAuth(runtime);
+    const aspectRatio = runtime?.model.config.aspectRatio ?? this.settings.imageAspectRatio;
+    const resolution = runtime?.model.config.resolution ?? this.settings.imageResolution;
+    const input: Record<string, unknown> = { prompt };
+    if (aspectRatio) input.aspect_ratio = aspectRatio;
+    if (resolution) input.image_resolution = resolution.toUpperCase();
+    if (imageUrls?.length) {
+      input.images = imageUrls.map((value) => ({
+        type: value.startsWith("data:") ? "base64" : "url",
+        data: value,
+      }));
+    }
+
+    const headers = {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    };
+    const response = await fetch(`${baseUrl}/media`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model: runtime?.model.upstreamId ?? this.settings.imageModel,
+        input,
+        async: true,
+      }),
+      signal,
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Polza image generation failed (${response.status}): ${detail}`);
+    }
+
+    let media = (await response.json()) as PolzaMediaResponse;
+    const deadline = Date.now() + 170_000;
+    while (media.status === "pending" || media.status === "processing") {
+      if (!media.id) throw new Error("Polza image generation did not return a media id");
+      if (Date.now() >= deadline) throw new Error("Polza image generation timed out");
+      await waitForPolzaPoll(signal);
+      const status = await fetch(`${baseUrl}/media/${encodeURIComponent(media.id)}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal,
+      });
+      if (!status.ok) {
+        const detail = await status.text().catch(() => "");
+        throw new Error(`Polza media status failed (${status.status}): ${detail}`);
+      }
+      media = (await status.json()) as PolzaMediaResponse;
+    }
+    if (media.status !== "completed") {
+      throw new Error(
+        `Polza image generation ${media.status || "failed"}: ${media.error?.message || "unknown error"}`
+      );
+    }
+    return this.bufferFromPolzaMedia(media.data, signal);
+  }
+
+  private async bufferFromPolzaMedia(data: unknown, signal?: AbortSignal): Promise<Buffer | null> {
+    const item = Array.isArray(data) ? data[0] : data;
+    if (typeof item === "string") {
+      if (item.startsWith("data:")) {
+        return Buffer.from(item.split(",", 2)[1] ?? "", "base64");
+      }
+      return this.bufferFromImageData({ url: item }, signal);
+    }
+    if (!item || typeof item !== "object") return null;
+    const value = item as { url?: string; b64_json?: string; base64?: string };
+    return this.bufferFromImageData(
+      { url: value.url, b64_json: value.b64_json ?? value.base64 },
+      signal
+    );
   }
 
   /**
@@ -943,4 +1027,29 @@ export class LlmClient {
     }
     return null;
   }
+}
+
+type PolzaMediaResponse = {
+  id?: string;
+  status?: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  data?: unknown;
+  error?: { message?: string };
+};
+
+function waitForPolzaPoll(signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const abort = () => {
+      clearTimeout(timeout);
+      reject(signal?.reason);
+    };
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, 3_000);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }

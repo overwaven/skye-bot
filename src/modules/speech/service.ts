@@ -3,6 +3,7 @@ import type { ProviderService } from "../providers/service.js";
 import { OpenRouterSpeechProvider } from "./providers/openrouter.js";
 import { XaiSpeechProvider } from "./providers/xai.js";
 import { TinfoilSpeechProvider } from "./providers/tinfoil.js";
+import { PolzaSpeechProvider } from "./providers/polza.js";
 
 /**
  * Public speech facade exposed to the rest of the bot. Delegates to a
@@ -83,6 +84,23 @@ export class SpeechService {
           model.config.audioFormat === "oggopus"
             ? model.config.audioFormat
             : "oggopus",
+        sttLanguage: model.config.language || "",
+      });
+    }
+    if (provider.kind === "polza") {
+      return new PolzaSpeechProvider({
+        apiKey: provider.apiKey,
+        baseUrl: provider.baseUrl,
+        sttModel: capability === "stt" ? model.upstreamId : "",
+        ttsModel: capability === "tts" ? model.upstreamId : "",
+        ttsVoice: voice,
+        ttsResponseFormat: model.config.audioFormat === "wav" ? "wav" : "mp3",
+        sttInputFormat:
+          model.config.audioFormat === "wav" ||
+          model.config.audioFormat === "mp3" ||
+          model.config.audioFormat === "oggopus"
+            ? model.config.audioFormat
+            : "mp3",
         sttLanguage: model.config.language || "",
       });
     }

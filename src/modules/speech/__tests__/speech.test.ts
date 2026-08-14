@@ -11,6 +11,7 @@ import {
   validateTtsBytes,
 } from "../providers/openrouter.js";
 import { TinfoilSpeechProvider } from "../providers/tinfoil.js";
+import { PolzaSpeechProvider } from "../providers/polza.js";
 import { buildXaiTtsText, XaiSpeechProvider } from "../providers/xai.js";
 import { SpeechService } from "../service.js";
 import { createSendVoiceTool } from "../tool.js";
@@ -508,6 +509,63 @@ describe("expressive speech", () => {
       voice: "serena",
       instruct: "A bright, friendly character\nA quiet studio\nSlow and warm",
     });
+  });
+
+  it("decodes Polza JSON TTS audio and sends an explicit response format", async () => {
+    const mp3 = await ffmpegSineMp3(0.4);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ audio: mp3.toString("base64"), contentType: "audio/mpeg" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new PolzaSpeechProvider({
+      apiKey: "key",
+      baseUrl: "https://polza.ai/api/v1",
+      sttModel: "openai/whisper-large-v3-turbo",
+      ttsModel: "google/gemini-3.1-flash-tts-preview",
+      ttsVoice: "Kore",
+      ttsResponseFormat: "mp3",
+      sttInputFormat: "mp3",
+      sttLanguage: "",
+    });
+
+    const audio = await provider.synthesize("Привет");
+
+    expect(audio?.subarray(0, 4).toString("ascii")).toBe("OggS");
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      model: "google/gemini-3.1-flash-tts-preview",
+      voice: "Kore",
+      response_format: "mp3",
+    });
+  });
+
+  it("uses Polza multipart STT with the configured canonical model id", async () => {
+    const mp3 = await ffmpegSineMp3(0.4);
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ text: "Проверка" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = new PolzaSpeechProvider({
+      apiKey: "key",
+      baseUrl: "https://polza.ai/api/v1",
+      sttModel: "openai/whisper-large-v3-turbo",
+      ttsModel: "",
+      ttsVoice: "Kore",
+      ttsResponseFormat: "mp3",
+      sttInputFormat: "mp3",
+      sttLanguage: "ru",
+    });
+
+    await expect(provider.recognize(mp3)).resolves.toBe("Проверка");
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://polza.ai/api/v1/audio/transcriptions");
+    expect((init.body as FormData).get("model")).toBe("openai/whisper-large-v3-turbo");
   });
 
   it("prepares one voice note with a per-call voice and directions", async () => {

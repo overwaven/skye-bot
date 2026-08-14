@@ -4,6 +4,7 @@ export const PROVIDER_KINDS = [
   "xai",
   "perplexity",
   "tinfoil",
+  "polza",
   "openai-compatible",
 ] as const;
 

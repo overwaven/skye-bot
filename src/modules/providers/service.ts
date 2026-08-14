@@ -302,7 +302,7 @@ export class ProviderService {
         input.multiplier ?? 1,
         input.enabled === false ? 0 : 1,
         JSON.stringify({
-          ...(provider.kind === "openai-compatible"
+          ...(provider.kind === "openai-compatible" || provider.kind === "polza"
             ? { apiMode: "chat-completions" as const }
             : { apiMode: "responses" as const }),
           ...(provider.kind === "perplexity"
@@ -984,6 +984,7 @@ function providerLabel(kind: ProviderKind): string {
     xai: "xAI",
     perplexity: "Perplexity",
     tinfoil: "Tinfoil",
+    polza: "Polza.ai",
     "openai-compatible": "OpenAI-compatible provider",
   }[kind];
 }
