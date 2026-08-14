@@ -205,7 +205,7 @@ export function createRunLlmReply(opts: {
 
       // Resolve the user's selected model + token quota for this turn.
       const billAcc = tenant.userId ? deps.billing.getAccount(tenant.userId) : undefined;
-      const modelId = billAcc?.modelId ?? deps.llm.defaultModelId;
+      const modelId = deps.llm.resolveModel(billAcc?.modelId ?? deps.llm.defaultModelId).id;
       // The user message was already persisted to chatLog above, so historyFor
       // already includes it. Do not append userItem again.
       const inputItems: ResponseInputItem[] = contextFor(tenant, modelId);

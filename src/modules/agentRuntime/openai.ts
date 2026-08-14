@@ -155,6 +155,10 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
   readonly engine = "openai_agents" as const;
   private readonly provider: OpenAIProvider;
   private readonly xaiProvider: OpenAIProvider | null;
+  private readonly catalogProviders = new Map<
+    string,
+    { updatedAt: string; useResponses: boolean; provider: OpenAIProvider }
+  >();
   private readonly runner: Runner;
 
   constructor(
@@ -197,6 +201,7 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
   async close(): Promise<void> {
     await this.provider.close();
     await this.xaiProvider?.close();
+    await Promise.all([...this.catalogProviders.values()].map(({ provider }) => provider.close()));
   }
 
   async run(request: AgentRunRequest): Promise<string> {
@@ -384,6 +389,32 @@ export class OpenAIAgentsRuntime implements AgentRuntime {
   }
 
   private providerFor(entry: ModelEntry): OpenAIProvider {
+    const runtime = entry.providerId
+      ? this.deps.llm.settings.providers?.resolveModel(entry.id)
+      : null;
+    if (runtime) {
+      const useResponses = !this.deps.llm.usesChatCompletions(entry);
+      const cached = this.catalogProviders.get(runtime.provider.id);
+      if (
+        cached?.updatedAt === runtime.provider.updatedAt &&
+        cached.useResponses === useResponses
+      ) {
+        return cached.provider;
+      }
+      const provider = new OpenAIProvider({
+        apiKey: runtime.provider.apiKey,
+        baseURL: runtime.provider.baseUrl,
+        useResponses,
+        strictFeatureValidation: false,
+      });
+      if (cached) void cached.provider.close();
+      this.catalogProviders.set(runtime.provider.id, {
+        updatedAt: runtime.provider.updatedAt,
+        useResponses,
+        provider,
+      });
+      return provider;
+    }
     if (entry.provider === "xai") {
       if (!this.xaiProvider) {
         throw new Error('A model with provider: "xai" is configured but xai_api_key is not set.');
