@@ -3,6 +3,7 @@ import type Database from "better-sqlite3";
 import type { SkyeConfig } from "../../core/config.js";
 import type { ModelEntry } from "../llm/config.js";
 import { decryptProviderSecret, encryptProviderSecret } from "./secrets.js";
+import { fetchPerplexityModels, probePerplexityProvider } from "./perplexity.js";
 import {
   MODEL_CAPABILITIES,
   PROVIDER_KINDS,
@@ -303,6 +304,9 @@ export class ProviderService {
           ...(provider.kind === "openai-compatible"
             ? { apiMode: "chat-completions" as const }
             : { apiMode: "responses" as const }),
+          ...(provider.kind === "perplexity"
+            ? { builtinTools: ["web_search", "fetch_url"] as const }
+            : {}),
           ...(input.config ?? {}),
         }),
         now,
@@ -315,6 +319,7 @@ export class ProviderService {
   updateModel(id: string, input: ModelInput): AiModel | null {
     const existing = this.getModel(id);
     if (!existing) return null;
+    const provider = this.getProvider(existing.providerId);
     const capabilities = normalizeCapabilities(input.capabilities);
     if (capabilities.length === 0) throw new Error("Choose at least one capability");
     this.db
@@ -330,7 +335,12 @@ export class ProviderService {
         input.contextWindow ?? existing.contextWindow,
         input.multiplier ?? existing.multiplier,
         input.enabled === false ? 0 : 1,
-        JSON.stringify(input.config ?? existing.config),
+        JSON.stringify({
+          ...(provider?.kind === "perplexity"
+            ? { builtinTools: ["web_search", "fetch_url"] as const }
+            : {}),
+          ...(input.config ?? existing.config),
+        }),
         new Date().toISOString(),
         id
       );
@@ -361,19 +371,26 @@ export class ProviderService {
   }
 
   textCatalog(): ModelEntry[] {
+    const providers = new Map(this.listProviders().map((provider) => [provider.id, provider.kind]));
     return this.listAvailableModels()
       .filter((model) => model.capabilities.includes("text"))
-      .map((model) => ({
-        id: model.id,
-        name: model.name,
-        model: model.upstreamId,
-        providerId: model.providerId,
-        multiplier: model.multiplier,
-        contextWindow: model.contextWindow,
-        builtinTools: model.config.builtinTools,
-        preset: model.config.preset,
-        apiMode: model.config.apiMode,
-      }));
+      .map((model) => {
+        const kind = providers.get(model.providerId);
+        return {
+          id: model.id,
+          name: model.name,
+          model: model.upstreamId,
+          providerId: model.providerId,
+          ...(kind === "openrouter" || kind === "perplexity" || kind === "xai"
+            ? { provider: kind }
+            : {}),
+          multiplier: model.multiplier,
+          contextWindow: model.contextWindow,
+          builtinTools: model.config.builtinTools,
+          preset: model.config.preset,
+          apiMode: model.config.apiMode,
+        };
+      });
   }
 
   getRouting(chatId?: number): AiRouting {
@@ -460,6 +477,11 @@ export class ProviderService {
   async discoverModels(id: string): Promise<DiscoveredModel[]> {
     const provider = this.getProviderCredentials(id);
     if (!provider) throw new Error("Provider not found");
+    if (provider.kind === "perplexity") {
+      return (await fetchPerplexityModels(provider))
+        .filter((entry) => typeof entry.id === "string")
+        .map((entry) => discoverModel(entry));
+    }
     const response = await fetch(`${provider.baseUrl}/models`, {
       headers: { Authorization: `Bearer ${provider.apiKey}` },
       signal: AbortSignal.timeout(15_000),
@@ -773,6 +795,7 @@ async function probeProvider(
   provider: ProviderCredentials
 ): Promise<{ ok: boolean; error?: string }> {
   if (!provider.apiKey) return { ok: false, error: "Add an API key and try again." };
+  if (provider.kind === "perplexity") return probePerplexityProvider(provider);
   try {
     const response = await fetch(`${provider.baseUrl}/models`, {
       headers: { Authorization: `Bearer ${provider.apiKey}` },

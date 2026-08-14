@@ -8,6 +8,7 @@ import type { ModelEntry } from "./config.js";
 import { log } from "../../utils/log.js";
 import type { ProviderService } from "../providers/service.js";
 import type { ResolvedAiModel } from "../providers/types.js";
+import { PerplexityAgentAdapter } from "./perplexity.js";
 
 export type { ResponseInputItem, ResponseFunctionToolCall };
 
@@ -361,9 +362,13 @@ function toChatMessages(
 export class LlmClient {
   private readonly modelById: Map<string, ModelEntry>;
   private defaultClient: OpenAI;
-  private perplexityClient: OpenAI | null = null;
+  private legacyPerplexity: PerplexityAgentAdapter | null = null;
   private xaiClient: OpenAI | null = null;
   private providerClients = new Map<string, { updatedAt: string; client: OpenAI }>();
+  private providerPerplexity = new Map<
+    string,
+    { updatedAt: string; adapter: PerplexityAgentAdapter }
+  >();
 
   constructor(public readonly settings: LlmModuleSettings) {
     this.modelById = new Map(settings.models.map((m) => [m.id, m]));
@@ -408,9 +413,49 @@ export class LlmClient {
    */
   usesChatCompletions(entry?: ModelEntry): boolean {
     const resolved = entry ?? this.resolveModel();
+    if (this.isPerplexity(resolved)) return false;
     if (resolved.apiMode) return resolved.apiMode === "chat-completions";
-    if (resolved.provider === "perplexity" || resolved.provider === "xai") return false;
+    if (resolved.provider === "xai") return false;
     return this.settings.useChatCompletions;
+  }
+
+  private runtimeFor(entry: ModelEntry): ResolvedAiModel | null {
+    return entry.providerId && this.settings.providers
+      ? this.settings.providers.resolveModel(entry.id)
+      : null;
+  }
+
+  private isPerplexity(entry: ModelEntry): boolean {
+    return (
+      entry.provider === "perplexity" || this.runtimeFor(entry)?.provider.kind === "perplexity"
+    );
+  }
+
+  private perplexityFor(entry: ModelEntry): PerplexityAgentAdapter | null {
+    const runtime = this.runtimeFor(entry);
+    if (runtime?.provider.kind === "perplexity") {
+      const cached = this.providerPerplexity.get(runtime.provider.id);
+      if (cached?.updatedAt === runtime.provider.updatedAt) return cached.adapter;
+      const adapter = new PerplexityAgentAdapter(runtime.provider);
+      this.providerPerplexity.set(runtime.provider.id, {
+        updatedAt: runtime.provider.updatedAt,
+        adapter,
+      });
+      return adapter;
+    }
+    if (entry.provider !== "perplexity") return null;
+    if (!this.settings.perplexityApiKey) {
+      throw new Error(
+        'A model with provider: "perplexity" is configured but perplexity_api_key is not set.'
+      );
+    }
+    if (!this.legacyPerplexity) {
+      this.legacyPerplexity = new PerplexityAgentAdapter({
+        apiKey: this.settings.perplexityApiKey,
+        baseUrl: this.settings.perplexityBaseUrl,
+      });
+    }
+    return this.legacyPerplexity;
   }
 
   /** Get the OpenAI SDK client for a model's provider. */
@@ -418,6 +463,9 @@ export class LlmClient {
     if (entry.providerId && this.settings.providers) {
       const resolved = this.settings.providers.resolveModel(entry.id);
       if (!resolved) throw new Error(`The provider for model "${entry.name}" is unavailable.`);
+      if (resolved.provider.kind === "perplexity") {
+        throw new Error("Perplexity models must use the Perplexity Agent API adapter.");
+      }
       const cached = this.providerClients.get(resolved.provider.id);
       if (cached?.updatedAt === resolved.provider.updatedAt) return cached.client;
       const client = new OpenAI({
@@ -431,18 +479,7 @@ export class LlmClient {
       return client;
     }
     if (entry.provider === "perplexity") {
-      if (!this.perplexityClient) {
-        if (!this.settings.perplexityApiKey) {
-          throw new Error(
-            'A model with provider: "perplexity" is configured but perplexity_api_key is not set.'
-          );
-        }
-        this.perplexityClient = new OpenAI({
-          baseURL: this.settings.perplexityBaseUrl,
-          apiKey: this.settings.perplexityApiKey,
-        });
-      }
-      return this.perplexityClient;
+      throw new Error("Perplexity models must use the Perplexity Agent API adapter.");
     }
     if (entry.provider === "xai") {
       if (!this.xaiClient) {
@@ -477,6 +514,17 @@ export class LlmClient {
   /** One-shot non-streaming call. */
   async ask(instructions: string, input: string, modelId?: string): Promise<LlmResponse> {
     const entry = this.resolveModel(modelId);
+    const perplexity = this.perplexityFor(entry);
+    if (perplexity) {
+      return perplexity.ask({
+        model: entry.model,
+        instructions,
+        input,
+        maxOutputTokens: this.settings.maxCompletionTokens,
+        builtinTools: entry.builtinTools,
+        preset: entry.preset,
+      });
+    }
     const client = this.clientFor(entry);
     if (this.usesChatCompletions(entry)) {
       const completion = await client.chat.completions.create({
@@ -531,6 +579,18 @@ export class LlmClient {
     modelId?: string
   ): LlmStream {
     const entry = this.resolveModel(modelId);
+    const perplexity = this.perplexityFor(entry);
+    if (perplexity) {
+      return perplexity.stream({
+        model: entry.model,
+        instructions,
+        input,
+        maxOutputTokens: this.settings.maxCompletionTokens,
+        builtinTools: entry.builtinTools,
+        tools,
+        preset: entry.preset,
+      });
+    }
     if (this.usesChatCompletions(entry)) {
       return this.askStreamViaChat(instructions, input, tools, modelId);
     }

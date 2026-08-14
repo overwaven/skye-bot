@@ -21,7 +21,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (!response.ok) {
       let message = `${response.status} ${response.statusText}`
       try {
-        const body = (await response.json()) as { error?: string }
+        const body = (await response.json()) as { error?: string; code?: string }
         if (body.error) message = body.error
       } catch {
         // The status text is still useful when the response is not JSON.
@@ -64,6 +64,10 @@ export type ModelCapability =
 
 export interface AiModelConfig {
   apiMode?: "responses" | "chat-completions"
+  builtinTools?: Array<
+    "web_search" | "fetch_url" | "finance_search" | "people_search" | "sandbox"
+  >
+  preset?: string
   aspectRatio?: string
   resolution?: "1k" | "2k" | ""
   voice?: string

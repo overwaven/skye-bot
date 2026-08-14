@@ -1,6 +1,6 @@
 import { createHmac } from "crypto";
 import { describe, expect, test } from "vitest";
-import { validateInitData } from "../auth.js";
+import { validateInitData, validateInitDataDetailed } from "../auth.js";
 
 const BOT_TOKEN = "123456:test-token";
 const NOW = 1_800_000_000;
@@ -31,5 +31,19 @@ describe("Telegram Mini App authentication", () => {
     expect(
       validateInitData(signed(NOW).replace("Skye", "Mallory"), BOT_TOKEN, 3_600, NOW)
     ).toBeNull();
+  });
+
+  test("distinguishes an expired session from invalid signed data", () => {
+    expect(validateInitDataDetailed(signed(NOW - 3_601), BOT_TOKEN, 3_600, NOW)).toEqual({
+      ok: false,
+      reason: "expired",
+    });
+    expect(
+      validateInitDataDetailed(signed(NOW).replace("Skye", "Mallory"), BOT_TOKEN, 3_600, NOW)
+    ).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  test("accepts signed Mini App sessions for the new 24-hour default", () => {
+    expect(validateInitData(signed(NOW - 23 * 3_600), BOT_TOKEN, undefined, NOW)?.user.id).toBe(42);
   });
 });

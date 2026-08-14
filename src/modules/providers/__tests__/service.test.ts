@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { migrations } from "../migrations.js";
 import { ProviderService } from "../service.js";
 import { LlmClient } from "../../llm/client.js";
@@ -17,7 +17,10 @@ describe("ProviderService", () => {
     service = new ProviderService(db, "test-bot-token");
   });
 
-  afterEach(() => db.close());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    db.close();
+  });
 
   it("stores server credentials without exposing them in provider responses", () => {
     const provider = service.createProvider({
@@ -79,6 +82,93 @@ describe("ProviderService", () => {
     service.deleteModel(model.id);
     expect(client.models).toEqual([]);
     expect(() => client.resolveModel()).toThrow("No text model is configured");
+  });
+
+  it("marks dynamic Perplexity models for the dedicated Agent API runtime", () => {
+    const provider = service.createProvider({
+      name: "Perplexity",
+      kind: "perplexity",
+      baseUrl: "https://api.perplexity.ai/v1",
+      apiKey: "pplx-key",
+    });
+    const model = service.createModel(provider.id, {
+      name: "Sonar",
+      upstreamId: "perplexity/sonar",
+      capabilities: ["text"],
+      config: { builtinTools: ["web_search", "fetch_url"] },
+    });
+
+    expect(service.textCatalog()).toMatchObject([
+      {
+        id: model.id,
+        provider: "perplexity",
+        providerId: provider.id,
+        model: "perplexity/sonar",
+        builtinTools: ["web_search", "fetch_url"],
+      },
+    ]);
+  });
+
+  it("routes a live dynamic Perplexity model through the official Agent API SDK", async () => {
+    const provider = service.createProvider({
+      name: "Perplexity",
+      kind: "perplexity",
+      baseUrl: "https://api.perplexity.ai/v1",
+      apiKey: "pplx-key",
+    });
+    const model = service.createModel(provider.id, {
+      name: "Sonar",
+      upstreamId: "perplexity/sonar",
+      capabilities: ["text"],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id: "resp_test",
+            created_at: 1_800_000_000,
+            model: "perplexity/sonar",
+            object: "response",
+            status: "completed",
+            output: [
+              {
+                id: "msg_test",
+                type: "message",
+                role: "assistant",
+                status: "completed",
+                content: [{ type: "output_text", text: "Agent answer", annotations: [] }],
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+    );
+
+    const client = new LlmClient({
+      apiKey: "",
+      baseUrl: "https://legacy.example/v1",
+      models: [],
+      defaultModelId: "",
+      maxCompletionTokens: 500,
+      useChatCompletions: false,
+      imageApiKey: "",
+      imageBaseUrl: "",
+      imageModel: "",
+      pdfEngine: "",
+      pdfMaxBytes: 1024,
+      perplexityBaseUrl: "https://api.perplexity.ai/v1",
+      xaiBaseUrl: "https://api.x.ai/v1",
+      providers: service,
+    });
+
+    await expect(client.ask("Be concise", "Hello", model.id)).resolves.toMatchObject({
+      output_text: "Agent answer",
+    });
+    expect(vi.mocked(fetch).mock.calls[0]?.[0].toString()).toBe(
+      "https://api.perplexity.ai/v1/responses"
+    );
   });
 
   it("resolves independent image and voice choices per chat", () => {

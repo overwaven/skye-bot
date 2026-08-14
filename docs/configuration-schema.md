@@ -152,7 +152,7 @@ when the key is absent. **Bounds** = numeric min/max or string length.
 
 | YAML path                    | Module | Type   | Required | Default                 | Enum | Bounds            |
 | ---------------------------- | ------ | ------ | -------- | ----------------------- | ---- | ----------------- |
-| `panel.auth_max_age_seconds` | panel  | number |          | `3600`                  |      | ≥ 60, ≤ 86400     |
+| `panel.auth_max_age_seconds` | panel  | number |          | `86400`                 |      | ≥ 60, ≤ 86400     |
 | `panel.json_body_limit_kb`   | panel  | number |          | `3072`                  |      | ≥ 64, ≤ 10240     |
 | `panel.rate_limit_max`       | panel  | number |          | `120`                   |      | ≥ 10, ≤ 10000     |
 | `panel.rate_limit_window_ms` | panel  | number |          | `60000`                 |      | ≥ 1000, ≤ 3600000 |

@@ -707,6 +707,9 @@ export function ProviderManagerSheet({
               createdProvider.kind === "openai-compatible"
                 ? "chat-completions"
                 : "responses",
+            ...(createdProvider.kind === "perplexity"
+              ? { builtinTools: ["web_search" as const, "fetch_url" as const] }
+              : {}),
           },
         })
       }

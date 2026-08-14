@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { existsSync } from "fs";
 import type { SkyeModule } from "../../core/module.js";
 import { panelConfigSchema } from "./config.js";
-import { validateInitData, type ValidatedInitData } from "./auth.js";
+import { validateInitDataDetailed, type ValidatedInitData } from "./auth.js";
 import { tenantFromInitData, type TenantContext } from "../../core/tenant.js";
 import { log } from "../../utils/log.js";
 
@@ -77,11 +77,19 @@ export const panelModule: SkyeModule = {
         res.status(401).json({ error: "Missing init data" });
         return;
       }
-      const validated = validateInitData(initData, botToken, c.panel.auth_max_age_seconds);
-      if (!validated) {
-        res.status(401).json({ error: "Invalid init data" });
+      const validation = validateInitDataDetailed(initData, botToken, c.panel.auth_max_age_seconds);
+      if (!validation.ok) {
+        res.status(401).json(
+          validation.reason === "expired"
+            ? {
+                error: "Session expired. Close and reopen the Mini App.",
+                code: "INIT_DATA_EXPIRED",
+              }
+            : { error: "Invalid init data", code: "INIT_DATA_INVALID" }
+        );
         return;
       }
+      const validated = validation.data;
       (req as PanelRequest).initData = validated;
       (req as PanelRequest).tenant = tenantFromInitData(validated);
       next();

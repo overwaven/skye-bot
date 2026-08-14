@@ -1,7 +1,14 @@
 import { z } from "zod";
 import { section } from "../../core/config.js";
 
-export const builtinToolSchema = z.enum(["web_search", "fetch_url", "sandbox"]);
+export const builtinToolSchema = z.enum([
+  "web_search",
+  "fetch_url",
+  "finance_search",
+  "people_search",
+  "sandbox",
+]);
+export type BuiltinTool = z.infer<typeof builtinToolSchema>;
 
 export const modelSchema = z.object({
   id: z.string().min(1),

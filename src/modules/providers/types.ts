@@ -41,7 +41,7 @@ export interface ProviderCredentials extends AiProvider {
 
 export interface AiModelConfig {
   apiMode?: "responses" | "chat-completions";
-  builtinTools?: Array<"web_search" | "fetch_url" | "sandbox">;
+  builtinTools?: Array<"web_search" | "fetch_url" | "finance_search" | "people_search" | "sandbox">;
   preset?: string;
   aspectRatio?: string;
   resolution?: "1k" | "2k" | "";

@@ -27,7 +27,7 @@ export class AgentRuntimeService implements AgentRuntime {
     if (this.engine === "openai_agents" && model.provider === "perplexity") {
       log.info(
         { modelId: model.id, chatId: request.tenant.chatId },
-        "Using legacy agent runtime for optional Perplexity model"
+        "Using the dedicated Perplexity Agent API adapter"
       );
     }
     return runChatLoop(

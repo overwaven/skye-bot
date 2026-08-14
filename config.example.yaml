@@ -61,8 +61,8 @@ base_url: "https://openrouter.ai/api/v1"
 
 # Perplexity Agent API — required only if any model in the catalog above
 # has provider: "perplexity". Get a key at https://console.perplexity.ai
-# Skye uses the Responses API (OpenAI-compatible) to talk to Perplexity,
-# enabling server-side web search and sandbox tools without MCP.
+# Skye uses the official @perplexity-ai/perplexity_ai SDK and its Agent API
+# Responses interface, including streaming, custom functions, and hosted tools.
 perplexity_api_key: ""
 perplexity_base_url: "https://api.perplexity.ai/v1"
 
@@ -84,14 +84,16 @@ xai_base_url: "https://api.x.ai/v1"
 #   provider:    "openrouter" (default), "perplexity", or "xai".
 #                When "perplexity", the request is routed to the Perplexity
 #                Agent API (requires perplexity_api_key). Perplexity models
-#                use the Responses API exclusively and can enable server-side
-#                tools (web_search, sandbox) on Perplexity's infrastructure.
+#                use the official SDK exclusively and can enable server-side
+#                tools on Perplexity's infrastructure.
 #                When "xai", the request is routed to api.x.ai (requires
 #                xai_api_key). Supports Responses + Chat Completions; works
 #                with the openai_agents runtime.
 #   builtin_tools: list of Perplexity built-in tools to enable.
 #                "web_search"  — let the model search the web and cite sources.
 #                "fetch_url"   — let the model fetch a specific URL's content.
+#                "finance_search" — retrieve market and financial data.
+#                "people_search" — search for professional profiles.
 #                "sandbox"     — let the model run code in an isolated container.
 #   preset:      Perplexity preset name (e.g. "pro-search") for optimized
 #                search behavior. See Perplexity docs for available presets.
@@ -113,17 +115,16 @@ models:
     name: Toronto
     model: openai/gpt-5.5
     multiplier: 4.0
-  # Example: a Perplexity-powered tier with built-in web search + sandbox.
+  # Example: Perplexity Sonar with hosted web search and URL fetching.
   # Requires perplexity_api_key below.
   # - id: perplexity-pro
   #   name: Pro Search
-  #   model: openai/gpt-5.5
+  #   model: perplexity/sonar
   #   multiplier: 5.0
   #   provider: perplexity
   #   builtin_tools:
   #     - web_search
-  #     - sandbox
-  #   preset: pro-search
+  #     - fetch_url
   # Example: Grok 4.5 via xAI. Requires xai_api_key above.
   # - id: grok
   #   name: Grok
@@ -140,7 +141,7 @@ models:
 
 # Agent execution engine. `openai_agents` uses the OpenAI Agents SDK for the
 # model/tool loop, streaming, subagents and resumable run state. Perplexity
-# model entries automatically fall back to the legacy runtime.
+# model entries use Skye's dedicated official-SDK Agent API adapter.
 agent_runtime:
   engine: openai_agents
   # 20 tool/model turns plus one normal final-answer turn.
@@ -379,7 +380,8 @@ panel:
   webapp_url: "http://localhost:3001"
   # Port for the panel web server
   webapp_port: 3001
-  auth_max_age_seconds: 3600
+  # Signed Telegram launch data remains valid while a long settings session is open.
+  auth_max_age_seconds: 86400
   rate_limit_window_ms: 60000
   rate_limit_max: 120
   json_body_limit_kb: 3072
