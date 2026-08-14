@@ -46,6 +46,7 @@ function main(): void {
 
   // Cross-field sanity checks that Zod can't express inline.
   const cfg = result.data as {
+    ai?: { providers?: unknown[] };
     models?: Array<{ provider?: string }>;
     perplexity_api_key?: string;
     xai_api_key?: string;
@@ -60,29 +61,40 @@ function main(): void {
     owner?: { user_id: number };
   };
   const warnings: string[] = [];
+  const usesUnifiedAiConfig = (cfg.ai?.providers?.length ?? 0) > 0;
 
   const perplexityUsed = cfg.models?.some((m) => m.provider === "perplexity") ?? false;
-  if (perplexityUsed && !cfg.perplexity_api_key) {
+  if (!usesUnifiedAiConfig && perplexityUsed && !cfg.perplexity_api_key) {
     console.error('✖ a model uses provider: "perplexity" but perplexity_api_key is unset');
     process.exit(1);
   }
 
   const xaiChatUsed = cfg.models?.some((m) => m.provider === "xai") ?? false;
-  if (xaiChatUsed && !cfg.xai_api_key) {
+  if (!usesUnifiedAiConfig && xaiChatUsed && !cfg.xai_api_key) {
     console.error('✖ a model uses provider: "xai" but xai_api_key is unset');
     process.exit(1);
   }
 
-  if (cfg.image?.provider === "xai" && !cfg.image.api_key && !cfg.xai_api_key) {
+  if (
+    !usesUnifiedAiConfig &&
+    cfg.image?.provider === "xai" &&
+    !cfg.image.api_key &&
+    !cfg.xai_api_key
+  ) {
     console.error('✖ image.provider is "xai" but neither image.api_key nor xai_api_key is set');
     process.exit(1);
   }
 
-  if (cfg.voice?.provider === "yandex" && !cfg.voice.yc_api_key) {
+  if (!usesUnifiedAiConfig && cfg.voice?.provider === "yandex" && !cfg.voice.yc_api_key) {
     warnings.push("voice.provider=yandex but voice.yc_api_key is unset");
   }
 
-  if (cfg.voice?.provider === "xai" && !cfg.voice.xai?.api_key && !cfg.xai_api_key) {
+  if (
+    !usesUnifiedAiConfig &&
+    cfg.voice?.provider === "xai" &&
+    !cfg.voice.xai?.api_key &&
+    !cfg.xai_api_key
+  ) {
     warnings.push("voice.provider=xai but voice.xai.api_key and xai_api_key are unset");
   }
 
