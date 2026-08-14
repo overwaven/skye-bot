@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PerplexityAgentAdapter, toPerplexityInput } from "../perplexity.js";
+import {
+  PerplexityAgentAdapter,
+  sanitizePerplexitySchema,
+  toPerplexityInput,
+} from "../perplexity.js";
 import { fetchPerplexityModels, perplexitySdkBaseUrl } from "../../providers/perplexity.js";
 
 afterEach(() => {
@@ -40,6 +44,54 @@ function agentResponse(text: string) {
 }
 
 describe("Perplexity Agent API adapter", () => {
+  it("normalizes connector schemas to the Agent API function-tool subset", () => {
+    expect(
+      sanitizePerplexitySchema({
+        $schema: "http://json-schema.org/draft-07/schema#",
+        title: "Request",
+        type: "object",
+        properties: {
+          operation: {
+            anyOf: [
+              { type: "string", const: "add" },
+              { type: "string", const: "delete" },
+            ],
+          },
+          values: {
+            type: "object",
+            propertyNames: { type: "string" },
+            additionalProperties: { type: "string" },
+          },
+          looseObject: { type: "object", additionalProperties: true },
+          closedObject: { type: "object", additionalProperties: false },
+          looseArray: { type: "array", items: {} },
+          title: { type: "string", title: "Document title" },
+          default: { type: "string", default: "standard" },
+          count: { type: "number", default: 10, examples: [5] },
+        },
+      })
+    ).toEqual({
+      type: "object",
+      properties: {
+        operation: { type: "string", enum: ["add", "delete"] },
+        values: { type: "object", properties: {} },
+        looseObject: { type: "object", properties: {} },
+        closedObject: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+        },
+        looseArray: {
+          type: "array",
+          items: { type: "object", properties: {} },
+        },
+        title: { type: "string" },
+        default: { type: "string" },
+        count: { type: "number" },
+      },
+    });
+  });
+
   it("normalizes the panel's /v1 URL for the official SDK and model discovery", async () => {
     expect(perplexitySdkBaseUrl("https://api.perplexity.ai/v1")).toBe("https://api.perplexity.ai");
     const fetchMock = vi.fn().mockResolvedValue(
@@ -100,7 +152,7 @@ describe("Perplexity Agent API adapter", () => {
         type: "function",
         name: "remember",
         description: "Save a fact",
-        parameters: { type: "object" },
+        parameters: { type: "object", properties: {} },
         strict: false,
       },
     ]);

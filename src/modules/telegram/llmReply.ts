@@ -278,8 +278,7 @@ export function createRunLlmReply(opts: {
           signal: controller.signal,
         });
 
-      const fallbackIds = deps.llm.models.map((model) => model.id).filter((id) => id !== modelId);
-      const attempts = [modelId, modelId, ...fallbackIds];
+      const attempts = [modelId, modelId];
       let rawText = "";
       let usedModelId = modelId;
       let lastAttemptError: unknown;
@@ -309,7 +308,7 @@ export function createRunLlmReply(opts: {
       }
 
       if (!rawText && !hasPreparedMedia()) {
-        const recoveryModelId = fallbackIds[0] ?? modelId;
+        const recoveryModelId = modelId;
         void draft.send("", { ...DEFAULT_DRAFT_STATUS, text: "Trying without tools…" });
         try {
           const recoveryInput = contextFor(tenant, recoveryModelId);

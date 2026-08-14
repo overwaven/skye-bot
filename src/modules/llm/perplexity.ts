@@ -22,6 +22,68 @@ interface AgentRequest {
   preset?: string;
 }
 
+const UNSUPPORTED_SCHEMA_KEYS = new Set([
+  "$id",
+  "$schema",
+  "default",
+  "examples",
+  "propertyNames",
+  "title",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function sanitizePerplexitySchema(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizePerplexitySchema);
+  if (!isRecord(value)) return value;
+
+  const result: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (UNSUPPORTED_SCHEMA_KEYS.has(key)) continue;
+    if (key === "additionalProperties" && raw !== false) continue;
+    if (key === "properties" && isRecord(raw)) {
+      result.properties = Object.fromEntries(
+        Object.entries(raw).map(([name, schema]) => [name, sanitizePerplexitySchema(schema)])
+      );
+      continue;
+    }
+    result[key] = sanitizePerplexitySchema(raw);
+  }
+
+  if ("const" in result) {
+    if (!("enum" in result)) result.enum = [result.const];
+    delete result.const;
+  }
+
+  const alternatives = result.anyOf;
+  if (Array.isArray(alternatives) && alternatives.every(isRecord)) {
+    const constants = alternatives.map((entry) =>
+      Array.isArray(entry.enum) && entry.enum.length === 1 ? entry.enum[0] : undefined
+    );
+    const types = [...new Set(alternatives.map((entry) => entry.type))];
+    if (constants.every((entry) => entry !== undefined) && types.length === 1) {
+      delete result.anyOf;
+      result.type = types[0];
+      result.enum = constants;
+    }
+  }
+
+  if (result.type === "array" && isRecord(result.items) && Object.keys(result.items).length === 0) {
+    result.items = { type: "object", properties: {} };
+  }
+
+  if (result.type === "object" && !isRecord(result.properties)) result.properties = {};
+
+  return result;
+}
+
+function agentError(error: { message: string; code?: string; type?: string }): Error {
+  const metadata = [error.type, error.code].filter(Boolean).join(" / ");
+  return new Error(metadata ? `${error.message} (${metadata})` : error.message);
+}
+
 function stringifyContent(value: unknown): string {
   if (typeof value === "string") return value;
   try {
@@ -134,8 +196,8 @@ function requestParams(request: AgentRequest, stream: boolean): ResponseCreatePa
     request.tools?.map((tool) => ({
       type: "function" as const,
       name: tool.name,
-      description: tool.description,
-      parameters: tool.parameters,
+      description: tool.description.slice(0, 1024),
+      parameters: sanitizePerplexitySchema(tool.parameters) as Record<string, unknown>,
       strict: false,
     })) ?? [];
   return {
@@ -182,7 +244,7 @@ class PerplexityAgentStream implements LlmStream {
           output_text: outputText(event.response.output),
         };
       } else if (event.type === "response.failed") {
-        throw new Error(event.error.message);
+        throw agentError(event.error);
       }
     }
     if (completed) return normalizeResponse(completed, snapshot);

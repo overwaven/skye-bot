@@ -4,14 +4,12 @@ import {
   ArrowLeftIcon,
   ArrowPathIcon,
   CheckCircleIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
   CpuChipIcon,
   ExclamationTriangleIcon,
   KeyIcon,
-  MicrophoneIcon,
-  PhotoIcon,
   PlusIcon,
-  SpeakerWaveIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline"
 import { useCallback, useEffect, useId, useMemo, useState } from "react"
@@ -107,36 +105,26 @@ const ROUTES: Array<{
   >
   capability: ModelCapability
   label: string
-  description: string
-  icon: typeof PhotoIcon
 }> = [
   {
     key: "imageGenerationModelId",
     capability: "image_generation",
     label: "Image generator",
-    description: "Creates new images in this chat.",
-    icon: PhotoIcon,
   },
   {
     key: "imageEditModelId",
     capability: "image_edit",
     label: "Image editor",
-    description: "Edits images shared in this chat.",
-    icon: PhotoIcon,
   },
   {
     key: "ttsModelId",
     capability: "tts",
     label: "Voice model",
-    description: "Turns Skye's replies into voice notes.",
-    icon: SpeakerWaveIcon,
   },
   {
     key: "sttModelId",
     capability: "stt",
     label: "Transcription model",
-    description: "Understands voice notes and audio files.",
-    icon: MicrophoneIcon,
   },
 ]
 
@@ -145,50 +133,38 @@ const DEFAULT_ROUTES: Array<{
   capability: ModelCapability
   label: string
 }> = [
-  { key: "textModelId", capability: "text", label: "Default text model" },
-  { key: "imageGenerationModelId", capability: "image_generation", label: "Default image generator" },
-  { key: "imageEditModelId", capability: "image_edit", label: "Default image editor" },
-  { key: "ttsModelId", capability: "tts", label: "Default voice model" },
-  { key: "sttModelId", capability: "stt", label: "Default transcription model" },
+  { key: "textModelId", capability: "text", label: "Text" },
+  { key: "imageGenerationModelId", capability: "image_generation", label: "Image generation" },
+  { key: "imageEditModelId", capability: "image_edit", label: "Image editing" },
+  { key: "ttsModelId", capability: "tts", label: "Voice" },
+  { key: "sttModelId", capability: "stt", label: "Transcription" },
 ]
 
 function SelectField({
   id,
   label,
-  description,
   value,
   models,
-  defaultModelId,
   onChange,
 }: {
   id: string
   label: string
-  description: string
   value: string | null
   models: AiModelRecord[]
-  defaultModelId: string | null
   onChange: (value: string | null) => void
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <div>
-        <Label htmlFor={id} className="text-[14px] font-semibold text-ink">
-          {label}
-        </Label>
-        <p className="mt-0.5 text-[12px] leading-4 text-muted">{description}</p>
-      </div>
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id} className="text-[13px] font-semibold text-ink">
+        {label}
+      </Label>
       <select
         id={id}
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || null)}
-        className="min-h-11 w-full rounded-[14px] border border-[var(--segment-border)] bg-[var(--segment-fill)] px-3 text-[14px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-sky"
+        className="min-h-11 w-full rounded-[12px] border border-[var(--segment-border)] bg-[var(--segment-fill)] px-3 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-sky"
       >
-        <option value="">
-          Use bot default
-          {defaultModelId
-            ? ` · ${models.find((model) => model.id === defaultModelId)?.name ?? "model"}`
-            : ""}
-        </option>
+        <option value="">Bot default</option>
         {models.map((model) => (
           <option key={model.id} value={model.id}>
             {model.name} · {model.providerName}
@@ -287,15 +263,13 @@ export function AiSettingsSheet({
       >
         <SheetHeader className="px-5 pt-5 pr-14 pb-4 text-left">
           <SheetTitle>AI for this chat</SheetTitle>
-          <SheetDescription>
-            Choose from models enabled by the bot administrators.
-          </SheetDescription>
+          <SheetDescription>Overrides for this chat.</SheetDescription>
         </SheetHeader>
 
         <div className="flex flex-col gap-6 px-5 pb-[calc(var(--safe-bottom)+1.5rem)]">
           {catalog && catalog.chats.length > 1 && (
             <div className="flex flex-col gap-2">
-              <Label htmlFor={`${fieldPrefix}-chat`}>Chat</Label>
+              <Label htmlFor={`${fieldPrefix}-chat`}>Apply to</Label>
               <select
                 id={`${fieldPrefix}-chat`}
                 value={catalog.chatId}
@@ -354,45 +328,42 @@ export function AiSettingsSheet({
                 </div>
               </section>
 
-              <section className="flex flex-col gap-5" aria-labelledby={`${fieldPrefix}-models-heading`}>
+              <section className="flex flex-col gap-3" aria-labelledby={`${fieldPrefix}-models-heading`}>
                 <h3 id={`${fieldPrefix}-models-heading`} className="text-[15px] font-semibold text-ink">
-                  Media and voice models
+                  Models
                 </h3>
-                {ROUTES.map((route) => (
-                  <SelectField
-                    key={route.key}
-                    id={`${fieldPrefix}-${route.key}`}
-                    label={route.label}
-                    description={route.description}
-                    value={catalog.overrides[route.key]}
-                    defaultModelId={catalog.defaults[route.key]}
-                    models={catalog.models.filter((model) =>
-                      model.capabilities.includes(route.capability)
-                    )}
-                    onChange={(value) => void updateRoute(route.key, value)}
-                  />
-                ))}
+                <GlassCard strong className="flex flex-col gap-4 p-4">
+                  {ROUTES.map((route) => (
+                    <SelectField
+                      key={route.key}
+                      id={`${fieldPrefix}-${route.key}`}
+                      label={route.label}
+                      value={catalog.overrides[route.key]}
+                      models={catalog.models.filter((model) =>
+                        model.capabilities.includes(route.capability)
+                      )}
+                      onChange={(value) => void updateRoute(route.key, value)}
+                    />
+                  ))}
 
-                <div className="flex flex-col gap-2">
-                  <Label htmlFor={`${fieldPrefix}-voice`}>Default voice</Label>
-                  <Input
-                    id={`${fieldPrefix}-voice`}
-                    value={catalog.overrides.ttsVoice ?? ""}
-                    placeholder={catalog.defaults.ttsVoice || "Provider default"}
-                    onChange={(event) =>
-                      setCatalog({
-                        ...catalog,
-                        overrides: { ...catalog.overrides, ttsVoice: event.target.value },
-                      })
-                    }
-                    onBlur={(event) =>
-                      void updateRoute("ttsVoice", event.target.value.trim() || null)
-                    }
-                  />
-                  <p className="text-[12px] leading-4 text-muted">
-                    Enter a voice supported by the selected voice model.
-                  </p>
-                </div>
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor={`${fieldPrefix}-voice`} className="text-[13px] font-semibold text-ink">Voice</Label>
+                    <Input
+                      id={`${fieldPrefix}-voice`}
+                      value={catalog.overrides.ttsVoice ?? ""}
+                      placeholder={catalog.defaults.ttsVoice || "Provider default"}
+                      onChange={(event) =>
+                        setCatalog({
+                          ...catalog,
+                          overrides: { ...catalog.overrides, ttsVoice: event.target.value },
+                        })
+                      }
+                      onBlur={(event) =>
+                        void updateRoute("ttsVoice", event.target.value.trim() || null)
+                      }
+                    />
+                  </div>
+                </GlassCard>
               </section>
 
               {catalog.canManageProviders && (
@@ -477,11 +448,13 @@ function ModelForm({
   model,
   onSaved,
   onCancel,
+  onDelete,
 }: {
   providerId: string
   model?: AiModelRecord | DiscoveredAiModel
   onSaved: () => void
   onCancel: () => void
+  onDelete?: () => void
 }) {
   const [name, setName] = useState(model?.name ?? "")
   const [upstreamId, setUpstreamId] = useState(model?.upstreamId ?? "")
@@ -591,6 +564,11 @@ function ModelForm({
           {busy ? "Saving…" : record ? "Save model" : "Add model"}
         </GlassButton>
       </div>
+      {record && onDelete && (
+        <GlassButton variant="danger" className="w-full" onClick={onDelete}>
+          <TrashIcon aria-hidden className="size-4" /> Delete model
+        </GlassButton>
+      )}
     </GlassCard>
   )
 }
@@ -615,6 +593,8 @@ export function ProviderManagerSheet({
   const [discovered, setDiscovered] = useState<DiscoveredAiModel[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [editingModel, setEditingModel] = useState<{ providerId: string; model?: AiModelRecord } | null>(null)
+  const [managerView, setManagerView] = useState<"providers" | "defaults">("providers")
+  const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null)
   const adminModels = useMemo(() => {
     const names = new Map(data?.providers.map((provider) => [provider.id, provider.name]) ?? [])
     return (data?.providers.flatMap((provider) => provider.models) ?? []).map((model) => ({
@@ -731,6 +711,7 @@ export function ProviderManagerSheet({
     if (!(await confirmTelegram(`Delete ${provider.name} and all of its models?`))) return
     try {
       await api.deleteProvider(provider.id)
+      if (expandedProviderId === provider.id) setExpandedProviderId(null)
       await load()
       await onChanged()
       toast.success("Provider deleted")
@@ -743,6 +724,7 @@ export function ProviderManagerSheet({
     if (!(await confirmTelegram(`Delete ${model.name}?`))) return
     try {
       await api.deleteProviderModel(model.id)
+      setEditingModel(null)
       await load()
       await onChanged()
       toast.success("Model deleted")
@@ -789,7 +771,7 @@ export function ProviderManagerSheet({
               <SheetTitle>{title}</SheetTitle>
               <SheetDescription>
                 {step === "list"
-                  ? "Manage server credentials and the models available in Skye."
+                  ? "Providers and bot-wide defaults."
                   : `Step ${step === "choose" ? 1 : step === "credentials" ? 2 : 3} of 3`}
               </SheetDescription>
             </div>
@@ -875,118 +857,293 @@ export function ProviderManagerSheet({
               providerId={editingModel.providerId}
               model={editingModel.model}
               onCancel={() => setEditingModel(null)}
+              onDelete={
+                editingModel.model
+                  ? () => void removeModel(editingModel.model!)
+                  : undefined
+              }
               onSaved={() => { setEditingModel(null); void load(); void onChanged() }}
             />
           ) : (
             <>
-              {data && data.providers.length > 0 && (
-                <GlassCard strong className="flex flex-col gap-4 p-4">
-                  <div>
-                    <p className="text-[15px] font-semibold text-ink">Bot defaults</p>
-                    <p className="mt-1 text-[12px] leading-4 text-muted">Used when a chat has not selected its own model.</p>
-                  </div>
-                  {DEFAULT_ROUTES.map((route) => {
-                    const choices = adminModels.filter((model) => model.enabled && model.capabilities.includes(route.capability))
-                    return (
-                      <div key={route.key} className="grid gap-1.5">
-                        <Label htmlFor={`default-${route.key}`}>{route.label}</Label>
-                        <select
-                          id={`default-${route.key}`}
-                          value={data.defaults[route.key] ?? ""}
-                          onChange={async (event) => {
-                            try {
-                              await api.updateAiDefaults({ [route.key]: event.target.value || null })
-                              await load()
-                              await onChanged()
-                              haptic.selection()
-                            } catch (error) {
-                              toast.error(error instanceof Error ? error.message : String(error))
-                            }
-                          }}
-                          className="min-h-11 rounded-[12px] border border-[var(--segment-border)] bg-[var(--segment-fill)] px-3 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-sky"
-                        >
-                          <option value="">Not configured</option>
-                          {choices.map((model) => (
-                            <option key={model.id} value={model.id}>{model.name} · {model.providerName}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )
-                  })}
-                </GlassCard>
+              {data && (
+                <div
+                  role="tablist"
+                  aria-label="AI provider settings"
+                  className="grid grid-cols-2 gap-1 rounded-[16px] border border-[var(--segment-border)] bg-[var(--segment-fill)] p-1"
+                >
+                  {(["providers", "defaults"] as const).map((view) => (
+                    <button
+                      key={view}
+                      type="button"
+                      role="tab"
+                      aria-selected={managerView === view}
+                      onClick={() => setManagerView(view)}
+                      className={cn(
+                        "min-h-11 rounded-[12px] px-3 text-[13px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-sky",
+                        managerView === view ? "glass-strong text-ink" : "text-muted"
+                      )}
+                    >
+                      {view === "providers" ? "Providers" : "Defaults"}
+                    </button>
+                  ))}
+                </div>
               )}
-              {data?.providers.length === 0 ? (
+
+              {managerView === "defaults" && data ? (
+                data.providers.length === 0 ? (
+                  <GlassCard className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+                    <IconWell>
+                      <CpuChipIcon aria-hidden className="size-[18px]" />
+                    </IconWell>
+                    <div>
+                      <p className="text-[15px] font-semibold text-ink">No models available</p>
+                      <p className="mt-1 text-[13px] leading-[18px] text-muted">
+                        Add a provider before choosing bot defaults.
+                      </p>
+                    </div>
+                    <GlassButton onClick={() => setManagerView("providers")}>
+                      View providers
+                    </GlassButton>
+                  </GlassCard>
+                ) : (
+                  <GlassCard strong className="flex flex-col gap-4 p-4">
+                    <div>
+                      <p className="text-[15px] font-semibold text-ink">Bot defaults</p>
+                      <p className="mt-1 text-[12px] leading-4 text-muted">
+                        Used when a chat has no override.
+                      </p>
+                    </div>
+                    {DEFAULT_ROUTES.map((route) => {
+                      const choices = adminModels.filter(
+                        (model) =>
+                          model.enabled && model.capabilities.includes(route.capability)
+                      )
+                      return (
+                        <div key={route.key} className="grid gap-1.5">
+                          <Label htmlFor={`default-${route.key}`}>{route.label}</Label>
+                          <select
+                            id={`default-${route.key}`}
+                            value={data.defaults[route.key] ?? ""}
+                            onChange={async (event) => {
+                              try {
+                                await api.updateAiDefaults({
+                                  [route.key]: event.target.value || null,
+                                })
+                                await load()
+                                await onChanged()
+                                haptic.selection()
+                              } catch (error) {
+                                toast.error(
+                                  error instanceof Error ? error.message : String(error)
+                                )
+                              }
+                            }}
+                            className="min-h-11 rounded-[12px] border border-[var(--segment-border)] bg-[var(--segment-fill)] px-3 text-[13px] text-ink outline-none focus-visible:ring-2 focus-visible:ring-sky"
+                          >
+                            <option value="">Not configured</option>
+                            {choices.map((model) => (
+                              <option key={model.id} value={model.id}>
+                                {model.name} · {model.providerName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )
+                    })}
+                  </GlassCard>
+                )
+              ) : data?.providers.length === 0 ? (
                 <GlassCard className="flex flex-col items-center gap-3 px-6 py-8 text-center">
-                  <IconWell><CpuChipIcon aria-hidden className="size-[18px]" /></IconWell>
+                  <IconWell>
+                    <CpuChipIcon aria-hidden className="size-[18px]" />
+                  </IconWell>
                   <div>
                     <p className="text-[15px] font-semibold text-ink">No providers yet</p>
-                    <p className="mt-1 text-[13px] leading-[18px] text-muted">Connect a provider to make text, image, and audio models available.</p>
+                    <p className="mt-1 text-[13px] leading-[18px] text-muted">
+                      Connect a provider to add text, image, or audio models.
+                    </p>
                   </div>
-                  <GlassButton onClick={() => setStep("choose")}><PlusIcon aria-hidden className="size-[18px]" /> Add provider</GlassButton>
+                  <GlassButton onClick={() => setStep("choose")}>
+                    <PlusIcon aria-hidden className="size-[18px]" /> Add provider
+                  </GlassButton>
                 </GlassCard>
               ) : (
-                data?.providers.map((provider) => (
-                  <GlassCard key={provider.id} className="flex flex-col gap-4 p-4">
-                    <div className="flex items-start gap-3">
-                      <IconWell tone={provider.status === "ready" ? "success" : provider.status === "error" ? "danger" : "muted"}>
-                        {provider.status === "ready" ? <CheckCircleIcon aria-hidden className="size-[18px]" /> : <CpuChipIcon aria-hidden className="size-[18px]" />}
-                      </IconWell>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[15px] font-semibold text-ink">{provider.name}</p>
-                        <p className="mt-0.5 text-[12px] text-muted">{provider.kind} · {provider.models.length} {provider.models.length === 1 ? "model" : "models"}</p>
-                        {provider.lastError && <p role="alert" className="mt-2 text-[12px] leading-4 text-danger">{provider.lastError}</p>}
-                      </div>
-                      <IconButton label={`Delete ${provider.name}`} className="text-danger" onClick={() => void removeProvider(provider)}>
-                        <TrashIcon aria-hidden className="size-4" />
-                      </IconButton>
-                    </div>
-                    {provider.models.length > 0 && (
-                      <div className="flex flex-col gap-2">
-                        {provider.models.map((model) => (
-                          <div key={model.id} className="flex items-center gap-1 rounded-[12px] bg-[color-mix(in_oklab,var(--muted)_7%,transparent)] p-1">
-                            <button
-                              type="button"
-                              onClick={() => setEditingModel({ providerId: provider.id, model })}
-                              className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-[10px] px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-sky"
+                <>
+                  <GlassButton variant="secondary" onClick={() => setStep("choose")}>
+                    <PlusIcon aria-hidden className="size-[18px]" /> Add provider
+                  </GlassButton>
+
+                  {data?.providers.map((provider) => {
+                    const expanded = expandedProviderId === provider.id
+                    const statusLabel =
+                      provider.status === "ready"
+                        ? "Connected"
+                        : provider.status === "error"
+                          ? "Needs attention"
+                          : provider.status === "disabled"
+                            ? "Disabled"
+                            : "Not tested"
+                    return (
+                      <GlassCard key={provider.id} className="overflow-hidden p-2">
+                        <button
+                          type="button"
+                          aria-expanded={expanded}
+                          aria-controls={`provider-${provider.id}`}
+                          onClick={() =>
+                            setExpandedProviderId(expanded ? null : provider.id)
+                          }
+                          className="flex min-h-[64px] w-full items-center gap-3 rounded-[16px] px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-sky"
+                        >
+                          <IconWell
+                            tone={
+                              provider.status === "ready"
+                                ? "success"
+                                : provider.status === "error"
+                                  ? "danger"
+                                  : "muted"
+                            }
+                          >
+                            {provider.status === "ready" ? (
+                              <CheckCircleIcon aria-hidden className="size-[18px]" />
+                            ) : (
+                              <CpuChipIcon aria-hidden className="size-[18px]" />
+                            )}
+                          </IconWell>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[15px] font-semibold text-ink">
+                              {provider.name}
+                            </span>
+                            <span
+                              className={cn(
+                                "mt-0.5 block text-[12px]",
+                                provider.status === "error" ? "text-danger" : "text-muted"
+                              )}
                             >
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[13px] font-semibold text-ink">{model.name}</span>
-                                <span className="block truncate text-[11px] text-muted">{model.capabilities.map((capability) => CAPABILITY_LABELS[capability]).join(" · ")}</span>
-                              </span>
-                              <ChevronRightIcon aria-hidden className="size-4 text-faint" />
-                            </button>
-                            <IconButton label={`Delete ${model.name}`} className="text-danger" onClick={() => void removeModel(model)}>
-                              <TrashIcon aria-hidden className="size-4" />
-                            </IconButton>
+                              {statusLabel} · {provider.models.length}{" "}
+                              {provider.models.length === 1 ? "model" : "models"}
+                            </span>
+                          </span>
+                          <ChevronDownIcon
+                            aria-hidden
+                            className={cn(
+                              "size-4 shrink-0 text-faint",
+                              expanded && "rotate-180"
+                            )}
+                          />
+                        </button>
+
+                        {expanded && (
+                          <div
+                            id={`provider-${provider.id}`}
+                            className="flex flex-col gap-3 px-2 pt-2 pb-2"
+                          >
+                            {provider.lastError && (
+                              <p
+                                role="alert"
+                                className="rounded-[12px] bg-[color-mix(in_oklab,var(--danger)_9%,transparent)] px-3 py-2 text-[12px] leading-4 text-danger"
+                              >
+                                {provider.lastError}
+                              </p>
+                            )}
+
+                            {provider.models.length > 0 ? (
+                              <div className="flex flex-col gap-2">
+                                {provider.models.map((model) => (
+                                  <button
+                                    key={model.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setEditingModel({ providerId: provider.id, model })
+                                    }
+                                    className="flex min-h-11 w-full items-center gap-3 rounded-[12px] bg-[color-mix(in_oklab,var(--muted)_7%,transparent)] px-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-sky"
+                                  >
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-[13px] font-semibold text-ink">
+                                        {model.name}
+                                      </span>
+                                      <span className="block truncate text-[11px] text-muted">
+                                        {model.capabilities
+                                          .map(
+                                            (capability) =>
+                                              CAPABILITY_LABELS[capability]
+                                          )
+                                          .join(" · ")}
+                                      </span>
+                                    </span>
+                                    <ChevronRightIcon
+                                      aria-hidden
+                                      className="size-4 text-faint"
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="px-1 text-[12px] text-muted">No models added.</p>
+                            )}
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <GlassButton
+                                variant="ghost"
+                                className="px-2"
+                                onClick={async () => {
+                                  try {
+                                    await api.testProvider(provider.id)
+                                    toast.success("Connection works")
+                                    await load()
+                                  } catch (error) {
+                                    toast.error(
+                                      error instanceof Error
+                                        ? error.message
+                                        : String(error)
+                                    )
+                                    await load()
+                                  }
+                                }}
+                              >
+                                Test
+                              </GlassButton>
+                              <GlassButton
+                                variant="ghost"
+                                className="px-2"
+                                onClick={() => {
+                                  setEditingProviderId(provider.id)
+                                  setDraft({
+                                    name: provider.name,
+                                    kind: provider.kind,
+                                    baseUrl: provider.baseUrl,
+                                    apiKey: "",
+                                    enabled: provider.enabled,
+                                  })
+                                  setStep("credentials")
+                                }}
+                              >
+                                Edit
+                              </GlassButton>
+                              <GlassButton
+                                variant="soft"
+                                className="px-2"
+                                onClick={() =>
+                                  setEditingModel({ providerId: provider.id })
+                                }
+                              >
+                                Add model
+                              </GlassButton>
+                            </div>
+
+                            <GlassButton
+                              variant="danger"
+                              className="w-full"
+                              onClick={() => void removeProvider(provider)}
+                            >
+                              <TrashIcon aria-hidden className="size-4" /> Delete provider
+                            </GlassButton>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="grid grid-cols-3 gap-2">
-                      <GlassButton variant="ghost" className="px-2" onClick={async () => {
-                        try { await api.testProvider(provider.id); toast.success("Connection works"); await load() }
-                        catch (error) { toast.error(error instanceof Error ? error.message : String(error)); await load() }
-                      }}>
-                        Test
-                      </GlassButton>
-                      <GlassButton variant="ghost" className="px-2" onClick={() => {
-                        setEditingProviderId(provider.id)
-                        setDraft({ name: provider.name, kind: provider.kind, baseUrl: provider.baseUrl, apiKey: "", enabled: provider.enabled })
-                        setStep("credentials")
-                      }}>
-                        Edit
-                      </GlassButton>
-                      <GlassButton variant="soft" className="px-2" onClick={() => setEditingModel({ providerId: provider.id })}>
-                        Add model
-                      </GlassButton>
-                    </div>
-                  </GlassCard>
-                ))
-              )}
-              {data && data.providers.length > 0 && (
-                <GlassButton variant="secondary" onClick={() => setStep("choose")}>
-                  <PlusIcon aria-hidden className="size-[18px]" /> Add provider
-                </GlassButton>
+                        )}
+                      </GlassCard>
+                    )
+                  })}
+                </>
               )}
             </>
           )}
