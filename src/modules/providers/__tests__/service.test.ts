@@ -240,4 +240,71 @@ describe("ProviderService", () => {
     expect(service.getRouting(42).imageGenerationModelId).toBeNull();
     expect(service.resolve("image_generation", 42)).toBeNull();
   });
+
+  it("synchronizes the complete provider catalog and shared image default from config", () => {
+    const stale = service.createProvider({
+      name: "Stale",
+      kind: "openai-compatible",
+      baseUrl: "https://stale.example/v1",
+      apiKey: "old-key",
+    });
+    service.createModel(stale.id, {
+      name: "Stale image",
+      upstreamId: "stale-image",
+      capabilities: ["image_generation", "image_edit"],
+    });
+
+    service.syncConfig({
+      providers: [
+        {
+          id: "xai",
+          name: "xAI",
+          kind: "xai",
+          base_url: "https://api.x.ai/v1",
+          api_key: "xai-key",
+          enabled: true,
+        },
+      ],
+      models: [
+        {
+          id: "grok",
+          provider: "xai",
+          name: "Grok",
+          model: "grok-4.6",
+          capabilities: ["text", "vision"],
+          context_window: 500_000,
+          multiplier: 2,
+          enabled: true,
+        },
+        {
+          id: "imagine",
+          provider: "xai",
+          name: "Grok Imagine",
+          model: "grok-imagine-image-2.0",
+          capabilities: ["image_generation", "image_edit"],
+          context_window: 128_000,
+          multiplier: 1,
+          enabled: true,
+          aspect_ratio: "1:1",
+        },
+      ],
+      defaults: {
+        text: "grok",
+        image: "imagine",
+        tts: "",
+        stt: "",
+        voice: "",
+      },
+    });
+
+    expect(service.listProviders().map((provider) => provider.id)).toEqual(["xai"]);
+    expect(service.listModels().map((model) => model.id)).toEqual(["grok", "imagine"]);
+    expect(service.getRouting()).toMatchObject({
+      textModelId: "grok",
+      imageGenerationModelId: "imagine",
+      imageEditModelId: "imagine",
+    });
+    expect(service.getModel("imagine")?.config.aspectRatio).toBe("1:1");
+    expect(service.getProviderCredentials("xai")?.apiKey).toBe("xai-key");
+  });
 });

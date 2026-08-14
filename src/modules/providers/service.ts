@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type Database from "better-sqlite3";
 import type { SkyeConfig } from "../../core/config.js";
 import type { ModelEntry } from "../llm/config.js";
+import type { AiProviderConfig } from "./config.js";
 import { decryptProviderSecret, encryptProviderSecret } from "./secrets.js";
 import { fetchPerplexityModels, probePerplexityProvider } from "./perplexity.js";
 import {
@@ -498,6 +499,119 @@ export class ProviderService {
       .map((entry) => discoverModel(entry));
   }
 
+  syncConfig(config: AiProviderConfig): void {
+    const providerIds = new Set(config.providers.map((provider) => provider.id));
+    const modelIds = new Set(config.models.map((model) => model.id));
+    const now = new Date().toISOString();
+
+    this.db.transaction(() => {
+      for (const provider of config.providers) {
+        const existing = this.db
+          .prepare<[string], ProviderRow>(`${PROVIDER_SELECT} WHERE id = ?`)
+          .get(provider.id);
+        const apiKeyEnc =
+          existing &&
+          decryptSecretSafely(existing.apiKeyEnc, this.secretFallback) === provider.api_key
+            ? existing.apiKeyEnc
+            : encryptProviderSecret(provider.api_key.trim(), this.secretFallback);
+        this.db
+          .prepare(
+            `INSERT INTO ai_providers
+              (id, name, kind, base_url, api_key_enc, enabled, status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               name = excluded.name,
+               kind = excluded.kind,
+               base_url = excluded.base_url,
+               api_key_enc = excluded.api_key_enc,
+               enabled = excluded.enabled,
+               status = CASE WHEN excluded.enabled = 0 THEN 'disabled'
+                             WHEN ai_providers.enabled = 0 THEN 'untested'
+                             ELSE ai_providers.status END,
+               last_error = CASE WHEN ai_providers.api_key_enc = excluded.api_key_enc
+                                 THEN ai_providers.last_error ELSE NULL END,
+               updated_at = excluded.updated_at`
+          )
+          .run(
+            provider.id,
+            provider.name.trim(),
+            provider.kind,
+            trimUrl(provider.base_url),
+            apiKeyEnc,
+            provider.enabled ? 1 : 0,
+            provider.enabled ? "untested" : "disabled",
+            existing?.createdAt ?? now,
+            now
+          );
+      }
+
+      deleteRowsNotIn(this.db, "ai_models", modelIds);
+
+      for (const model of config.models) {
+        const runtimeConfig: AiModelConfig = {
+          ...(model.api_mode ? { apiMode: model.api_mode } : {}),
+          ...(model.builtin_tools ? { builtinTools: model.builtin_tools } : {}),
+          ...(model.preset ? { preset: model.preset } : {}),
+          ...(model.aspect_ratio ? { aspectRatio: model.aspect_ratio } : {}),
+          ...(model.resolution !== undefined ? { resolution: model.resolution } : {}),
+          ...(model.voice ? { voice: model.voice } : {}),
+          ...(model.voices ? { voices: model.voices } : {}),
+          ...(model.language ? { language: model.language } : {}),
+          ...(model.audio_format ? { audioFormat: model.audio_format } : {}),
+          ...(model.expressive !== undefined ? { expressive: model.expressive } : {}),
+          ...(model.pcm_sample_rate ? { pcmSampleRate: model.pcm_sample_rate } : {}),
+          ...(model.pcm_channels ? { pcmChannels: model.pcm_channels } : {}),
+        };
+        const existing = this.getModel(model.id);
+        this.db
+          .prepare(
+            `INSERT INTO ai_models
+              (id, provider_id, name, upstream_id, capabilities, context_window,
+               multiplier, enabled, config, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+               provider_id = excluded.provider_id,
+               name = excluded.name,
+               upstream_id = excluded.upstream_id,
+               capabilities = excluded.capabilities,
+               context_window = excluded.context_window,
+               multiplier = excluded.multiplier,
+               enabled = excluded.enabled,
+               config = excluded.config,
+               updated_at = excluded.updated_at`
+          )
+          .run(
+            model.id,
+            model.provider,
+            model.name.trim(),
+            model.model.trim(),
+            JSON.stringify(normalizeCapabilities(model.capabilities)),
+            model.context_window,
+            model.multiplier,
+            model.enabled ? 1 : 0,
+            JSON.stringify(runtimeConfig),
+            existing?.createdAt ?? now,
+            now
+          );
+      }
+
+      deleteRowsNotIn(this.db, "ai_providers", providerIds);
+      this.setDefaultRouting({
+        textModelId: config.defaults.text || null,
+        imageGenerationModelId: config.defaults.image || null,
+        imageEditModelId: config.defaults.image || null,
+        ttsModelId: config.defaults.tts || null,
+        sttModelId: config.defaults.stt || null,
+        ttsVoice: config.defaults.voice || null,
+      });
+      this.db.exec(
+        `UPDATE chat_ai_routing
+         SET image_generation_model_id = COALESCE(image_generation_model_id, image_edit_model_id),
+             image_edit_model_id = COALESCE(image_generation_model_id, image_edit_model_id)`
+      );
+    })();
+  }
+
   seedLegacy(config: SkyeConfig): void {
     const count =
       this.db.prepare<[], { count: number }>("SELECT COUNT(*) AS count FROM ai_providers").get()
@@ -869,6 +983,28 @@ function providerLabel(kind: ProviderKind): string {
     openrouter: "OpenRouter",
     xai: "xAI",
     perplexity: "Perplexity",
+    tinfoil: "Tinfoil",
     "openai-compatible": "OpenAI-compatible provider",
   }[kind];
+}
+
+function decryptSecretSafely(value: string, fallback: string): string {
+  try {
+    return decryptProviderSecret(value, fallback);
+  } catch {
+    return "";
+  }
+}
+
+function deleteRowsNotIn(
+  db: Database.Database,
+  table: "ai_models" | "ai_providers",
+  ids: Set<string>
+): void {
+  if (ids.size === 0) {
+    db.prepare(`DELETE FROM ${table}`).run();
+    return;
+  }
+  const placeholders = [...ids].map(() => "?").join(", ");
+  db.prepare(`DELETE FROM ${table} WHERE id NOT IN (${placeholders})`).run(...ids);
 }

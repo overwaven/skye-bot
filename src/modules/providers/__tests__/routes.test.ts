@@ -70,6 +70,18 @@ describe("provider panel routes", () => {
         { chatId: USER_ID, name: "Personal chat", type: "private" },
         { chatId: GROUP_ID, name: `Chat ${GROUP_ID}`, type: "supergroup" },
       ],
+      models: [],
     });
+  });
+
+  it("does not expose provider management routes", () => {
+    const services = new ServiceRegistry();
+    services.set("admin", { isAdmin: () => true } as never);
+    const routes = buildProviderRoutes(
+      { db: getDb(), services } as unknown as ModuleContext,
+      {} as ProviderService
+    );
+
+    expect(routes.map((route) => route.path)).toEqual(["/ai/catalog", "/ai/routing/:chatId"]);
   });
 });

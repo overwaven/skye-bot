@@ -36,6 +36,18 @@ when the key is absent. **Bounds** = numeric min/max or string length.
 | `agent_runtime.trace_include_sensitive_data` | agent_runtime | boolean |          | `false`         |                       |            |
 | `agent_runtime.tracing`                      | agent_runtime | boolean |          | `false`         |                       |            |
 
+## ai
+
+| YAML path           | Module      | Type   | Required | Default | Enum | Bounds |
+| ------------------- | ----------- | ------ | -------- | ------- | ---- | ------ |
+| `ai.defaults.image` | llm         | string |          |         |      |        |
+| `ai.defaults.stt`   | ai.defaults | string |          |         |      |        |
+| `ai.defaults.text`  | ai.defaults | string |          |         |      |        |
+| `ai.defaults.tts`   | ai.defaults | string |          |         |      |        |
+| `ai.defaults.voice` | speech      | string |          |         |      |        |
+| `ai.models`         | llm         | array  |          | `[]`    |      |        |
+| `ai.providers`      | ai          | array  |          | `[]`    |      |        |
+
 ## audit
 
 | YAML path              | Module | Type   | Required | Default  | Enum | Bounds |
@@ -250,9 +262,15 @@ when the key is absent. **Bounds** = numeric min/max or string length.
 
 ## Cross-field rules
 
-- If any model in `models[]` sets `provider: "perplexity"`, then
+- Provider and model IDs in the unified `ai` catalog must be unique.
+- Every `ai.models[].provider` must reference an entry in `ai.providers`.
+- `ai.defaults.image` must support both `image_generation` and `image_edit`.
+- Every configured default must reference an enabled model on an enabled provider.
+- When `ai.providers` is non-empty, it is the complete source of truth and legacy
+  provider fields are ignored. The following rules apply only to legacy configs.
+- If any legacy model in `models[]` sets `provider: "perplexity"`, then
   `perplexity_api_key` must be set.
-- If any model in `models[]` sets `provider: "xai"`, then
+- If any legacy model in `models[]` sets `provider: "xai"`, then
   `xai_api_key` must be set.
 - `image.provider: "xai"` requires `image.api_key` or `xai_api_key`.
 - `voice.provider: "yandex"` requires `voice.yc_api_key` for STT/TTS.

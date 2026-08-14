@@ -17,7 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "validate-config": "tsx scripts/validate-config.ts",
-    "config:schema": "tsx scripts/config-schema.ts"
+    "config:schema": "tsx scripts/config-schema.ts",
+    "migrate:ai-config": "tsx scripts/migrate-provider-config.ts"
   },
   "keywords": [
     "telegram",

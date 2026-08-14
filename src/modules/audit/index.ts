@@ -22,7 +22,7 @@ export const auditModule: SkyeModule = {
   migrations,
   init(ctx) {
     const c = ctx.config.audit;
-    const model = ctx.config.default_model_id;
+    const model = ctx.services.get("llm").defaultModelId;
     const service: AuditService = {
       log(entry: AuditEntry) {
         logRequest(entry, model);

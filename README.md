@@ -21,8 +21,8 @@
 
 ```bash
 pnpm install
-cp config.example.yaml config.yaml   # fill in bot_token; AI setup continues in the Mini App
-pnpm run dev          # or dev:pretty for human-readable logs
+cp config.example.yaml config.yaml   # fill in bot_token and the unified ai catalog
+pnpm run dev                          # or dev:pretty for human-readable logs
 ```
 
 See `AGENTS.md` for the repository conventions.

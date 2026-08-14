@@ -555,7 +555,7 @@ export function ConfigEditorSheet({
                             <p className="text-sm font-medium text-destructive">
                               Fix these issues before saving
                             </p>
-                            <ul className="max-h-28 space-y-1.5 overflow-y-auto text-xs leading-5">
+                            <ul className="panel-no-scrollbar max-h-28 space-y-1.5 overflow-y-auto text-xs leading-5">
                               {validation.issues.map((issue, index) => (
                                 <li
                                   key={`${issue.path}-${index}`}

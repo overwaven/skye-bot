@@ -397,7 +397,7 @@ export class LlmClient {
   resolveModel(modelId?: string): ModelEntry {
     const catalog = this.models;
     const fallback = catalog.find((model) => model.id === this.defaultModelId) ?? catalog[0];
-    if (!fallback) throw new Error("No text model is configured. Complete AI setup in the panel.");
+    if (!fallback) throw new Error("No text model is configured in config.yaml.");
     if (!modelId) return fallback;
     if (this.settings.providers?.hasProviders()) {
       return catalog.find((model) => model.id === modelId) ?? fallback;
@@ -685,7 +685,7 @@ export class LlmClient {
             ? this.settings.xaiApiKey
             : this.settings.apiKey;
       if (!apiKey) {
-        log.info("No text provider is configured yet; complete setup in the panel");
+        log.info("No text provider is configured in config.yaml");
         return;
       }
       const res = await fetch(`${baseUrl}/models`, {

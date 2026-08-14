@@ -114,7 +114,7 @@ export function PlusView({
             className="size-4 shrink-0 text-faint [stroke-width:2]"
           />
           <select
-            aria-label="Conversation model"
+            aria-label="Text model"
             value={activeModel ? activeModelId : ""}
             disabled={busy || models.length === 0}
             onChange={(event) => {

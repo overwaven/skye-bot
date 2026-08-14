@@ -4,7 +4,7 @@ import {
   ChatBubbleLeftRightIcon,
   ChevronRightIcon,
   Cog6ToothIcon,
-  CpuChipIcon,
+  PhotoIcon,
   InformationCircleIcon,
   MicrophoneIcon,
   ShieldCheckIcon,
@@ -109,7 +109,7 @@ export function ProfileView({
         <GlassCard
           as="button"
           onClick={onPlus}
-          aria-label="Open Plus to change model and plan"
+          aria-label="Change text model and plan"
           className="pressable flex w-full flex-col gap-3.5 p-[18px] text-left outline-none focus-visible:ring-2 focus-visible:ring-sky"
         >
           <span className="flex w-full items-center justify-between gap-3">
@@ -169,11 +169,11 @@ export function ProfileView({
             className="min-h-14"
             icon={
               <IconWell>
-                <CpuChipIcon aria-hidden className="size-[18px]" />
+                <PhotoIcon aria-hidden className="size-[18px]" />
               </IconWell>
             }
-            title="AI for this chat"
-            subtitle="Images, voice, and transcription"
+            title="Image model"
+            subtitle="Generation and editing"
             onClick={onAi}
             trailing={
               <ChevronRightIcon

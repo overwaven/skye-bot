@@ -3,6 +3,7 @@ export const PROVIDER_KINDS = [
   "openrouter",
   "xai",
   "perplexity",
+  "tinfoil",
   "openai-compatible",
 ] as const;
 

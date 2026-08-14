@@ -734,7 +734,7 @@ export function AgentDialog({
     >
       <DialogContent
         showCloseButton={false}
-        className="max-h-[90dvh] gap-0 overflow-y-auto rounded-[28px] border-transparent bg-transparent p-0 shadow-none ring-0"
+        className="panel-no-scrollbar max-h-[90dvh] gap-0 overflow-y-auto rounded-[28px] border-transparent bg-transparent p-0 shadow-none ring-0"
       >
         <div className="glass-sheet flex flex-col gap-4 rounded-[28px] p-5">
           <DialogHeader className="flex-row items-start gap-3">

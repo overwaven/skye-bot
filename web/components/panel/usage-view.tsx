@@ -45,7 +45,7 @@ function DetailBlock({ title, body }: { title: string; body: string }) {
       <h4 className="border-b border-[var(--divider)] bg-[color-mix(in_oklab,var(--sky)_8%,transparent)] px-3 py-2 text-[11px] leading-4 font-semibold tracking-[0.06em] text-muted uppercase">
         {title}
       </h4>
-      <pre className="max-h-56 overflow-auto p-3 font-mono text-[11px] leading-4 whitespace-pre-wrap text-ink">
+      <pre className="panel-no-scrollbar max-h-56 overflow-auto p-3 font-mono text-[11px] leading-4 whitespace-pre-wrap text-ink">
         {body}
       </pre>
     </section>

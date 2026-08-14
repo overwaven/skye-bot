@@ -6,10 +6,7 @@ import { useTheme } from "next-themes"
 import { toast } from "sonner"
 
 import { ConfigEditorSheet } from "@/components/config-editor"
-import {
-  AiSettingsSheet,
-  ProviderManagerSheet,
-} from "@/components/ai-settings"
+import { AiSettingsSheet } from "@/components/ai-settings"
 import { MemoryView } from "@/components/panel/memory-view"
 import { PanelTabBar, type TabKey } from "@/components/panel/nav"
 import { PlusView } from "@/components/panel/plus-view"
@@ -135,7 +132,6 @@ export function PanelApp() {
   const [adminOpen, setAdminOpen] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
-  const [providersOpen, setProvidersOpen] = useState(false)
   const configCloseRef = useRef<(() => void) | null>(null)
   const [agentsOpen, setAgentsOpen] = useState(false)
   const [agents, setAgents] = useState<AgentsResponse | null>(null)
@@ -263,12 +259,7 @@ export function PanelApp() {
   }, [load])
 
   useEffect(() => {
-    if (
-      tab !== "activity" ||
-      !about?.isAdmin ||
-      monitoring ||
-      monitoringFailed
-    )
+    if (tab !== "activity" || !about?.isAdmin || monitoring || monitoringFailed)
       return
     Promise.all([api.getMonitoring(), api.getAuditEvents()])
       .then(([health, events]) => {
@@ -292,31 +283,14 @@ export function PanelApp() {
   }, [agents, agentsOpen])
 
   useEffect(() => {
-    if (aiCatalog && !aiCatalog.configured && aiCatalog.canManageProviders) {
-      setProvidersOpen(true)
-    }
-  }, [aiCatalog])
-
-  useEffect(() => {
-    const close = agentEditing
-      ? () => setAgentEditing(null)
-      : connectorEditing
-        ? () => setConnectorEditing(null)
-        : providersOpen
-          ? () => setProvidersOpen(false)
-          : aiOpen
-            ? () => setAiOpen(false)
-        : agentsOpen
-          ? () => setAgentsOpen(false)
-          : configOpen
-            ? () => {
-                configCloseRef.current?.()
-              }
-            : adminOpen
-              ? () => setAdminOpen(false)
-              : aboutOpen
-                ? () => setAboutOpen(false)
-                : null
+    let close: (() => void) | null = null
+    if (agentEditing) close = () => setAgentEditing(null)
+    else if (connectorEditing) close = () => setConnectorEditing(null)
+    else if (aiOpen) close = () => setAiOpen(false)
+    else if (agentsOpen) close = () => setAgentsOpen(false)
+    else if (configOpen) close = () => configCloseRef.current?.()
+    else if (adminOpen) close = () => setAdminOpen(false)
+    else if (aboutOpen) close = () => setAboutOpen(false)
     return bindTelegramBackButton(close)
   }, [
     aboutOpen,
@@ -326,18 +300,7 @@ export function PanelApp() {
     configOpen,
     connectorEditing,
     aiOpen,
-    providersOpen,
   ])
-
-  const refreshAi = async () => {
-    const [catalog, modelData] = await Promise.all([
-      api.getAiCatalog(aiCatalog?.chatId),
-      api.getModels(),
-    ])
-    setAiCatalog(catalog)
-    setModels(modelData.models)
-    setDefaultModelId(modelData.defaultModelId)
-  }
 
   const setVoiceMode = async (voiceReplyMode: ChatConfig["voiceReplyMode"]) => {
     const previous = chatConfig
@@ -568,18 +531,7 @@ export function PanelApp() {
         open={aiOpen}
         onOpenChange={setAiOpen}
         initialCatalog={aiCatalog}
-        initialChatConfig={chatConfig}
         onCatalogChange={setAiCatalog}
-        onManageProviders={() => {
-          setAiOpen(false)
-          setProvidersOpen(true)
-        }}
-      />
-      <ProviderManagerSheet
-        open={providersOpen}
-        onOpenChange={setProvidersOpen}
-        onboarding={Boolean(aiCatalog && !aiCatalog.configured)}
-        onChanged={refreshAi}
       />
       <AgentsSheet
         data={agents}
