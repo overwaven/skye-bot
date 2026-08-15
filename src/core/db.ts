@@ -37,6 +37,7 @@ export function getDb(dbPath?: string): Database.Database {
     }
   }
   _db.pragma("journal_mode = WAL");
+  _db.pragma("busy_timeout = 5000");
   _db.pragma("foreign_keys = ON");
   ensureMigrationsTable(_db);
   return _db;

@@ -39,10 +39,15 @@ export class ThreadWorkQueue {
     { chatId: number; controller: AbortController; startedAt: number }
   >();
   private readonly generations = new Map<number, number>();
+  private readonly slotWaiters: Array<() => void> = [];
+  private activeSlots = 0;
   private timedOutTotal = 0;
   private cancelledTotal = 0;
 
-  constructor(private readonly timeoutMs: number) {}
+  constructor(
+    private readonly timeoutMs: number,
+    private readonly maxConcurrent = 64
+  ) {}
 
   enqueue(key: string, chatId: number, job: QueueJob): void {
     void this.schedule(key, chatId, job, false);
@@ -70,6 +75,12 @@ export class ThreadWorkQueue {
           throw new QueueCancelledError(chatId);
         }
 
+        await this.acquireSlot();
+        if ((this.generations.get(chatId) ?? 0) !== generation) {
+          this.releaseSlot();
+          throw new QueueCancelledError(chatId);
+        }
+
         const controller = new AbortController();
         this.active.set(key, { chatId, controller, startedAt: Date.now() });
         const timeoutError = new QueueTimeoutError(key, this.timeoutMs);
@@ -90,6 +101,7 @@ export class ThreadWorkQueue {
         } finally {
           clearTimeout(timer);
           if (this.active.get(key)?.controller === controller) this.active.delete(key);
+          this.releaseSlot();
         }
       })
       .catch((error: unknown) => {
@@ -142,6 +154,25 @@ export class ThreadWorkQueue {
     await Promise.all([...this.tails.values()]);
   }
 
+  private acquireSlot(): Promise<void> {
+    if (this.activeSlots < this.maxConcurrent) {
+      this.activeSlots += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      this.slotWaiters.push(() => {
+        this.activeSlots += 1;
+        resolve();
+      });
+    });
+  }
+
+  private releaseSlot(): void {
+    this.activeSlots -= 1;
+    const next = this.slotWaiters.shift();
+    if (next) next();
+  }
+
   private decrementPending(key: string): void {
     const remaining = (this.pending.get(key) ?? 1) - 1;
     if (remaining > 0) this.pending.set(key, remaining);
@@ -180,8 +211,8 @@ export class TelegramReliabilityService {
   private readonly insertUpdate: Database.Statement<[number, number | null, string]>;
   private readonly pruneUpdates: Database.Statement;
 
-  constructor(db: Database.Database, queueTimeoutMs: number) {
-    this.queue = new ThreadWorkQueue(queueTimeoutMs);
+  constructor(db: Database.Database, queueTimeoutMs: number, maxConcurrentJobs = 64) {
+    this.queue = new ThreadWorkQueue(queueTimeoutMs, maxConcurrentJobs);
     this.findUpdate = db.prepare(
       "SELECT update_id FROM telegram_processed_updates WHERE update_id = ?"
     );

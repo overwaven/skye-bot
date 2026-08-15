@@ -6,6 +6,7 @@ describe("telegram config security limits", () => {
     const c = telegramConfigSchema.parse({ bot_token: "token" });
     expect(c.telegram_drop_pending_updates).toBe("0");
     expect(c.telegram_job_timeout_ms).toBe(180_000);
+    expect(c.telegram_max_concurrent_jobs).toBe(64);
   });
 
   it("rejects unsafe queue timeout values", () => {
@@ -14,6 +15,9 @@ describe("telegram config security limits", () => {
     ).toThrow();
     expect(() =>
       telegramConfigSchema.parse({ bot_token: "token", telegram_job_timeout_ms: 900_001 })
+    ).toThrow();
+    expect(() =>
+      telegramConfigSchema.parse({ bot_token: "token", telegram_max_concurrent_jobs: 1 })
     ).toThrow();
   });
 

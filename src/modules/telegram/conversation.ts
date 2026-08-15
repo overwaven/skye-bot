@@ -12,7 +12,10 @@ export function createConversationHelpers(bot: Bot, deps: TelegramDeps) {
 
   const enqueue = (key: string, job: (signal: AbortSignal) => Promise<void>) => {
     const chatId = Number(key.split(":", 1)[0]);
-    return deps.reliability.queue.enqueueAndWait(key, chatId, job);
+    // Fire-and-forget: Telegram middleware must return without waiting for the
+    // LLM so other chats can be answered at the same time. Work for one thread
+    // is still serialized by ThreadWorkQueue.
+    deps.reliability.queue.enqueue(key, chatId, job);
   };
 
   const withBillingLock = async <T>(

@@ -11,6 +11,7 @@ export const telegramConfigSchema = z.object({
     .min(10_000)
     .max(15 * 60_000)
     .default(3 * 60_000),
+  telegram_max_concurrent_jobs: z.number().int().min(2).max(500).default(64),
   telegram_max_attachment_bytes: z
     .number()
     .int()
@@ -28,6 +29,7 @@ declare module "../../core/config.js" {
     telegram_polling_lock: string;
     telegram_drop_pending_updates: "0" | "1";
     telegram_job_timeout_ms: number;
+    telegram_max_concurrent_jobs: number;
     telegram_max_attachment_bytes: number;
   }
 }

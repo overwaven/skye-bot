@@ -141,7 +141,10 @@ export function registerMessageHandlers(opts: {
         );
         return;
       }
-      await runImageEditCommand(ctx, tenant, prompt);
+      await enqueue(tk, async (signal) => {
+        signal.throwIfAborted();
+        await runImageEditCommand(ctx, tenant, prompt);
+      });
       return;
     }
 
@@ -211,7 +214,10 @@ export function registerMessageHandlers(opts: {
         );
         return;
       }
-      await runImageEditCommand(captionCtx ?? ctxs[0], tenant, prompt, photoUrls);
+      await enqueue(tk, async (signal) => {
+        signal.throwIfAborted();
+        await runImageEditCommand(captionCtx ?? ctxs[0], tenant, prompt, photoUrls);
+      });
       return;
     }
 
