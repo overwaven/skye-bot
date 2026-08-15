@@ -55,7 +55,6 @@ export function createRunLlmReply(opts: {
   collectReplyMedia: MediaHelpers["collectReplyMedia"];
   storeConversation: ConversationHelpers["storeConversation"];
   contextFor: ConversationHelpers["contextFor"];
-  withBillingLock: ConversationHelpers["withBillingLock"];
 }) {
   const {
     deps,
@@ -65,7 +64,6 @@ export function createRunLlmReply(opts: {
     collectReplyMedia,
     storeConversation,
     contextFor,
-    withBillingLock,
   } = opts;
 
   const maybeSendChecklist = async (
@@ -231,6 +229,8 @@ export function createRunLlmReply(opts: {
         }
       }
 
+      // Token debit is a SQLite transaction, so concurrent chats of the same
+      // user can run in parallel without a process-wide billing mutex.
       const meterUsage = (
         usage: { promptTokens: number; completionTokens: number },
         usedModelId: string
@@ -285,9 +285,7 @@ export function createRunLlmReply(opts: {
       for (const attemptModelId of attempts) {
         controller.signal.throwIfAborted();
         try {
-          const attemptText = await withBillingLock(tenant.userId, () =>
-            runAttempt(attemptModelId, requestTools)
-          );
+          const attemptText = await runAttempt(attemptModelId, requestTools);
           rawText = attemptText;
           if (rawText || hasPreparedMedia()) usedModelId = attemptModelId;
           if (rawText || hasPreparedMedia()) break;
@@ -312,9 +310,7 @@ export function createRunLlmReply(opts: {
         void draft.send("", { ...DEFAULT_DRAFT_STATUS, text: "Trying without tools…" });
         try {
           const recoveryInput = contextFor(tenant, recoveryModelId);
-          rawText = await withBillingLock(tenant.userId, () =>
-            runAttempt(recoveryModelId, [], recoveryInput)
-          );
+          rawText = await runAttempt(recoveryModelId, [], recoveryInput);
           if (rawText) usedModelId = recoveryModelId;
         } catch (e) {
           lastAttemptError = e;

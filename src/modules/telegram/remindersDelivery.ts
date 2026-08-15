@@ -16,7 +16,7 @@ export function registerReminderDelivery(opts: {
   conversation: ConversationHelpers;
 }): void {
   const { bot, deps, access, conversation } = opts;
-  const { storeConversation, contextFor, withBillingLock, formatGroupMessage } = conversation;
+  const { storeConversation, contextFor, formatGroupMessage } = conversation;
 
   if (!deps.reminders) return;
 
@@ -171,19 +171,17 @@ export function registerReminderDelivery(opts: {
       actionTicker.start();
       try {
         const text = cleanMd(
-          await withBillingLock(reminder.userId, () =>
-            deps.agentRuntime.run({
-              tenant,
-              input: inputItems,
-              builtinTools: [],
-              allowConnectorTools: false,
-              modelId: reminderModelId,
-              beforeRound: checkReminderQuota,
-              onUsage: reminderMeter,
-              owner: deps.owner,
-              signal,
-            })
-          )
+          await deps.agentRuntime.run({
+            tenant,
+            input: inputItems,
+            builtinTools: [],
+            allowConnectorTools: false,
+            modelId: reminderModelId,
+            beforeRound: checkReminderQuota,
+            onUsage: reminderMeter,
+            owner: deps.owner,
+            signal,
+          })
         );
 
         if (!text) {

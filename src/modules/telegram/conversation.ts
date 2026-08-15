@@ -8,34 +8,12 @@ import { TEXT_HISTORY_LIMIT, TRACKED_CHATS } from "./deps.js";
 import type { MentionHelpers } from "./mention.js";
 
 export function createConversationHelpers(bot: Bot, deps: TelegramDeps) {
-  const billingQueues = new Map<number, Promise<void>>();
-
   const enqueue = (key: string, job: (signal: AbortSignal) => Promise<void>) => {
     const chatId = Number(key.split(":", 1)[0]);
     // Fire-and-forget: Telegram middleware must return without waiting for the
     // LLM so other chats can be answered at the same time. Work for one thread
     // is still serialized by ThreadWorkQueue.
     deps.reliability.queue.enqueue(key, chatId, job);
-  };
-
-  const withBillingLock = async <T>(
-    userId: number | undefined,
-    job: () => Promise<T>
-  ): Promise<T> => {
-    if (userId == null) return job();
-    const previous = billingQueues.get(userId) ?? Promise.resolve();
-    let release!: () => void;
-    const current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    billingQueues.set(userId, current);
-    await previous.catch(() => {});
-    try {
-      return await job();
-    } finally {
-      release();
-      if (billingQueues.get(userId) === current) billingQueues.delete(userId);
-    }
   };
 
   const maybeReactProactively = (
@@ -245,9 +223,7 @@ export function createConversationHelpers(bot: Bot, deps: TelegramDeps) {
   };
 
   return {
-    billingQueues,
     enqueue,
-    withBillingLock,
     maybeReactProactively,
     sanitizeHistory,
     historyFor,
