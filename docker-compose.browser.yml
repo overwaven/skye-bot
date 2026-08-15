@@ -1,0 +1,29 @@
+services:
+  browser-worker:
+    build:
+      context: .
+      dockerfile: browser-worker/Dockerfile
+    container_name: skye-browser-worker
+    restart: unless-stopped
+    environment:
+      BROWSER_WORKER_TOKEN: "${BROWSER_WORKER_TOKEN:-}"
+      BROWSER_MAX_SESSIONS: "${BROWSER_MAX_SESSIONS:-2}"
+      BROWSER_IDLE_TTL_SECONDS: "${BROWSER_IDLE_TTL_SECONDS:-900}"
+    ports:
+      - "127.0.0.1:${BROWSER_WORKER_HOST_PORT:-8765}:8765"
+    shm_size: "1gb"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5

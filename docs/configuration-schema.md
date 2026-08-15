@@ -77,6 +77,25 @@ when the key is absent. **Bounds** = numeric min/max or string length.
 | `billing.title`                       | billing | string  |          | `Skye Plus`                                                                                                                                                                                                    |      |        |
 | `billing.token_packs`                 | billing | array   |          | `[{"id":"pack_500","name":"Quick Boost","stars":499,"tokens":500000},{"id":"pack_1500","name":"Big Boost","stars":999,"tokens":1500000},{"id":"pack_5000","name":"Mega Boost","stars":2499,"tokens":5000000}]` |      |        |
 
+## browser
+
+| YAML path                     | Module  | Type    | Required | Default                                                                                                                          | Enum | Bounds               |
+| ----------------------------- | ------- | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------- | ---- | -------------------- |
+| `browser.agent_api_key`       | browser | string  |          |                                                                                                                                  |      |                      |
+| `browser.agent_base_url`      | browser | string  |          |                                                                                                                                  |      |                      |
+| `browser.agent_model`         | browser | string  |          |                                                                                                                                  |      |                      |
+| `browser.allowed_domains`     | browser | array   |          | `[]`                                                                                                                             |      |                      |
+| `browser.enabled`             | browser | boolean |          | `false`                                                                                                                          |      |                      |
+| `browser.max_agent_steps`     | browser | number  |          | `25`                                                                                                                             |      | > 0, ≤ 100           |
+| `browser.max_output_chars`    | browser | number  |          | `20000`                                                                                                                          |      | > 0, ≤ 200000        |
+| `browser.max_screenshot_bytes`| browser | number  |          | `10485760`                                                                                                                       |      | > 0, ≤ 26214400      |
+| `browser.prohibited_domains`  | browser | array   |          | `["localhost","127.0.0.1","::1","169.254.169.254","host.docker.internal","*.localhost","*.local","*.internal","metadata.google.internal","browser-worker","skye-bot"]` |      |                      |
+| `browser.request_timeout_ms`  | browser | number  |          | `300000`                                                                                                                         |      | > 0, ≤ 900000        |
+| `browser.viewport_height`     | browser | number  |          | `900`                                                                                                                            |      | ≥ 600, ≤ 1600        |
+| `browser.viewport_width`      | browser | number  |          | `1440`                                                                                                                           |      | ≥ 800, ≤ 2560        |
+| `browser.worker_token`        | browser | string  |          |                                                                                                                                  |      |                      |
+| `browser.worker_url`          | browser | string  |          | `http://127.0.0.1:8765`                                                                                                          |      |                      |
+
 ## channel
 
 | YAML path            | Module  | Type    | Required | Default | Enum | Bounds |
@@ -279,6 +298,8 @@ when the key is absent. **Bounds** = numeric min/max or string length.
 - `voice.provider: "xai"` falls back to `xai_api_key` when
   `voice.xai.api_key` is empty.
 - `sandbox.enabled: true` requires `sandbox.daytona_api_key`.
+- `browser.browser_task` requires `browser.agent_model` and `browser.agent_api_key`
+  (legacy top-level model credentials are used as a fallback).
 - `access.mode: "subscription"` requires `billing.enabled: true`.
 - If `owner.user_id` is `0`, first run prints a one-time `/claim_owner`
   token to the operator log and persists the claimed Telegram user ID.

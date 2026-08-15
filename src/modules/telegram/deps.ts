@@ -7,6 +7,7 @@ import type { UserConfigService } from "../userConfig/service.js";
 import type { SpeechService } from "../speech/service.js";
 import type { AuditService } from "../audit/service.js";
 import type { SandboxService } from "../sandbox/service.js";
+import type { BrowserService } from "../browser/service.js";
 import type { ProactiveService } from "../proactive/service.js";
 import type { RemindersService } from "../reminders/service.js";
 import type { BackgroundJobsService } from "../jobs/service.js";
@@ -29,6 +30,7 @@ export interface TelegramDeps {
   speech: SpeechService;
   audit: AuditService;
   sandbox?: SandboxService;
+  browser?: BrowserService;
   proactive?: ProactiveService;
   reminders?: RemindersService;
   jobs: BackgroundJobsService;
