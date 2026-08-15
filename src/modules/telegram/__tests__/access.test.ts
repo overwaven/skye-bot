@@ -55,4 +55,9 @@ describe("access modes", () => {
     });
     expect(checkAccess(deps({ mode: "open", banned: true, admin: true }), 10, 20).ok).toBe(true);
   });
+
+  test("bans are checked before public-command bypass would apply", () => {
+    const banned = checkAccess(deps({ mode: "open", banned: true }), 10, 20);
+    expect(banned.reason).toBe("banned");
+  });
 });

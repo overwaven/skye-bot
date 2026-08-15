@@ -51,7 +51,7 @@ export interface TelegramCommand {
   name: string;
   description: string;
   handler: (ctx: GrammyContext, tenant: TenantContext) => Promise<void> | void;
-  /** If true, this command bypasses the access gate. */
+  /** If true, this command bypasses allowlist/subscription. Banned users are still blocked. */
   public?: boolean;
   /** Set false for sensitive bootstrap commands that should not appear in Telegram's menu. */
   advertise?: boolean;

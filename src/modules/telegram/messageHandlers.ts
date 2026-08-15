@@ -25,6 +25,7 @@ import {
 import type { ConversationHelpers } from "./conversation.js";
 import type { MediaHelpers } from "./media.js";
 import type { MentionHelpers } from "./mention.js";
+import { parseTelegramCommand } from "./commandMessage.js";
 import type { RunLlmReply } from "./llmReply.js";
 
 export function registerMessageHandlers(opts: {
@@ -69,6 +70,8 @@ export function registerMessageHandlers(opts: {
     }
 
     if (!isDirectedAtBot(ctx)) return;
+    const text = ctx.message.text || "";
+    if (parseTelegramCommand(text)) return;
 
     const tenant = tenantFromGrammy(ctx);
     const tk = threadKey(tenant);
@@ -78,7 +81,6 @@ export function registerMessageHandlers(opts: {
     const refs = await collectReferenceImages(ctx);
     if (refs.length > 0) threadReferenceImages.set(tk, refs);
 
-    const text = ctx.message.text || "";
     await enqueue(tk, async (signal) => {
       const content = `${replyContext(ctx)}${replyImageContextNote(ctx)}${senderTag(ctx)}${text}`;
       const userItem: ResponseInputItem = {
@@ -150,6 +152,7 @@ export function registerMessageHandlers(opts: {
 
     // --- Vision analysis (single photo sent with a question for Skye) ---
     if (!isDirectedAtBot(ctx)) return;
+    if (parseTelegramCommand(captionRaw)) return;
     if (deps.llm.supportsImages() === false) {
       await sendRichReply(
         ctx,
@@ -223,6 +226,7 @@ export function registerMessageHandlers(opts: {
 
     // --- Vision analysis: feed all photos to the model at once ---
     if (!isDirectedAtBot(captionCtx ?? ctxs[0])) return;
+    if (parseTelegramCommand(captionRaw)) return;
     if (deps.llm.supportsImages() === false) {
       await sendRichReply(
         captionCtx ?? ctxs[0],
@@ -430,6 +434,8 @@ export function registerMessageHandlers(opts: {
   // --- Animation / GIF handler ---
   bot.on("message:animation", async (ctx) => {
     if (!isDirectedAtBot(ctx)) return;
+    const captionRaw = ctx.message.caption?.trim() || "";
+    if (parseTelegramCommand(captionRaw)) return;
     if (deps.llm.supportsImages() === false) {
       await sendRichReply(
         ctx,
@@ -440,7 +446,6 @@ export function registerMessageHandlers(opts: {
 
     const tenant = tenantFromGrammy(ctx);
     const tk = threadKey(tenant);
-    const captionRaw = ctx.message.caption?.trim() || "";
     await enqueue(tk, async (signal) => {
       try {
         const animation = ctx.message.animation;
@@ -537,6 +542,7 @@ export function registerMessageHandlers(opts: {
   bot.on("message:document", async (ctx) => {
     const captionRaw = ctx.message.caption?.trim() || "";
     if (!isDirectedAtBot(ctx)) return;
+    if (parseTelegramCommand(captionRaw)) return;
 
     const doc = ctx.message.document;
     const filename = doc.file_name ?? "document";
@@ -631,6 +637,7 @@ export function registerMessageHandlers(opts: {
   bot.on("message:audio", async (ctx) => {
     const captionRaw = ctx.message.caption?.trim() || "";
     if (!isDirectedAtBot(ctx)) return;
+    if (parseTelegramCommand(captionRaw)) return;
 
     const tenant = tenantFromGrammy(ctx);
     const tk = threadKey(tenant);

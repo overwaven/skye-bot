@@ -3,6 +3,7 @@ import { Bot, type Context as GrammyContext, type NextFunction } from "grammy";
 import type { Contributions } from "../../core/module.js";
 import { tenantFromGrammy, threadKey } from "../../core/tenant.js";
 import { checkAccess, type AccessDeps } from "./access.js";
+import { parseTelegramCommand, publicCommandSkipsAccessGate } from "./commandMessage.js";
 import { sendRichReply, serializeError } from "./helpers.js";
 import { log } from "../../utils/log.js";
 import type { ImageControl, MediaGroupEntry, TelegramDeps } from "./deps.js";
@@ -113,8 +114,20 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     // must always honor (pre-checkout ack, successful-payment crediting) or
     // handle ourselves (inline keyboard callbacks).
     if (ctx.preCheckoutQuery) return next();
-    if (ctx.callbackQuery) return next();
     if (ctx.message && "successful_payment" in ctx.message && ctx.message.successful_payment) {
+      return next();
+    }
+    if (ctx.callbackQuery) {
+      const callbackDecision = checkAccess(access, chatId, ctx.from?.id);
+      if (!callbackDecision.ok && callbackDecision.reason === "banned") {
+        await ctx
+          .answerCallbackQuery({
+            text: "You've been banned from using this bot.",
+            show_alert: true,
+          })
+          .catch(() => {});
+        return;
+      }
       return next();
     }
     // Channel posts have no human author and are only captured (no reply),
@@ -125,17 +138,20 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     const meUsername = ctx.me?.username ?? "";
     const text = ctx.message?.text ?? ctx.message?.caption ?? "";
 
-    const cmdMatch = text.match(/^\/(\w+)(?:@(\S+))?/);
-    const isOurCommand = cmdMatch
-      ? OUR_COMMANDS.has(cmdMatch[1]) && (!cmdMatch[2] || cmdMatch[2] === meUsername)
+    const cmd = parseTelegramCommand(text);
+    const isOurCommand = cmd
+      ? OUR_COMMANDS.has(cmd.name) &&
+        (!cmd.mention || cmd.mention.toLowerCase() === meUsername.toLowerCase())
       : false;
 
     // In groups, ignore commands addressed to other bots entirely.
-    if (isGroup && cmdMatch && !isOurCommand) return;
-
-    if (isOurCommand && PUBLIC_COMMANDS.has(cmdMatch![1])) return next();
+    if (isGroup && cmd && !isOurCommand) return;
 
     const decision = checkAccess(access, chatId, ctx.from?.id);
+    if (isOurCommand && PUBLIC_COMMANDS.has(cmd!.name) && publicCommandSkipsAccessGate(decision)) {
+      return next();
+    }
+
     if (!decision.ok) {
       const directed = isDirectedAtBot(ctx);
       if (directed) await sendRichReply(ctx, decision.message);
