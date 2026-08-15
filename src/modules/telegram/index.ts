@@ -40,7 +40,11 @@ export const telegramModule: SkyeModule = {
     const bot = new Bot(token);
     botRef = bot;
     ctx.services.set("telegramBot", bot);
-    const reliability = new TelegramReliabilityService(ctx.db, c.telegram_job_timeout_ms);
+    const reliability = new TelegramReliabilityService(
+      ctx.db,
+      c.telegram_job_timeout_ms,
+      c.telegram_max_concurrent_jobs
+    );
     reliabilityRef = reliability;
     ctx.services.set("telegramReliability", reliability);
   },
@@ -118,7 +122,9 @@ export const telegramModule: SkyeModule = {
     reliability.markPolling();
     const dropPendingUpdates = c.telegram_drop_pending_updates === "1";
     await bot.api.deleteWebhook({ drop_pending_updates: dropPendingUpdates });
-    runnerRef = run(bot);
+    runnerRef = run(bot, {
+      sink: { concurrency: Math.max(32, c.telegram_max_concurrent_jobs) },
+    });
     void runnerRef.task()?.catch((e) => {
       reliability.markStopped();
       releasePollingLock?.();
@@ -142,6 +148,7 @@ export const telegramModule: SkyeModule = {
     reliabilityRef?.markStopped();
     await runnerRef?.stop().catch(() => {});
     runnerRef = null;
+    await reliabilityRef?.queue.whenIdle().catch(() => {});
     releasePollingLock?.();
     releasePollingLock = null;
     reliabilityRef = null;

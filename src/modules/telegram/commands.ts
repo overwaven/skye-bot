@@ -165,22 +165,46 @@ export function buildTelegramCommands(opts: {
 
         const t0 = Date.now();
         log.info({ chatId: tenant.chatId, userId: tenant.userId }, "Image generation");
+        deps.reliability.queue.enqueue(threadKey(tenant), tenant.chatId, async (signal) => {
+          const actionInterval = setInterval(() => {
+            ctx.replyWithChatAction("upload_photo").catch(() => {});
+          }, 4000);
 
-        const actionInterval = setInterval(() => {
-          ctx.replyWithChatAction("upload_photo").catch(() => {});
-        }, 4000);
+          try {
+            signal.throwIfAborted();
+            await ctx.replyWithChatAction("upload_photo");
+            const buffer = await deps.llm.generateImage(prompt, undefined, signal, tenant.chatId);
 
-        try {
-          await ctx.replyWithChatAction("upload_photo");
-          const buffer = await deps.llm.generateImage(
-            prompt,
-            undefined,
-            AbortSignal.timeout(180_000),
-            tenant.chatId
-          );
+            if (!buffer) {
+              await sendRichReply(ctx, "_No image was generated. Try a different prompt._");
+              deps.audit.log({
+                ...ctxAudit(ctx),
+                msgType: "image",
+                command: "/image",
+                inputLen: prompt.length,
+                outputLen: 0,
+                latencyMs: Date.now() - t0,
+                status: "ok",
+                inputText: prompt,
+              });
+              return;
+            }
 
-          if (!buffer) {
-            await sendRichReply(ctx, "_No image was generated. Try a different prompt._");
+            const sent = await ctx.replyWithPhoto(new InputFile(buffer, "image.png"), {
+              reply_to_message_id: ctx.message!.message_id,
+              reply_markup: imageKeyboard(),
+            });
+            imageControls.set(imageControlKey(tenant.chatId, sent.message_id), {
+              prompt,
+              ownerUserId: tenant.userId!,
+              expiresAt: Date.now() + IMAGE_CONTROL_TTL_MS,
+            });
+            storeConversation(
+              tenant,
+              "assistant",
+              { kind: "image_generated", prompt, messageId: sent.message_id },
+              `generated image: ${prompt.slice(0, 200)} (message_id ${sent.message_id})`
+            );
             deps.audit.log({
               ...ctxAudit(ctx),
               msgType: "image",
@@ -191,60 +215,33 @@ export function buildTelegramCommands(opts: {
               status: "ok",
               inputText: prompt,
             });
-            return;
+          } catch (e) {
+            const ms = Date.now() - t0;
+            log.error({ ...serializeError(e), latencyMs: ms }, "Image generation failed");
+            storeConversation(
+              tenant,
+              "assistant",
+              { kind: "image_failed", prompt, error: fmtError(e) },
+              `image generation failed: ${fmtError(e)}`
+            );
+            await sendRichReply(ctx, "**Failed to generate the image.** Please try again.").catch(
+              () => {}
+            );
+            deps.audit.log({
+              ...ctxAudit(ctx),
+              msgType: "image",
+              command: "/image",
+              inputLen: prompt.length,
+              outputLen: 0,
+              latencyMs: ms,
+              status: "error",
+              errorMsg: fmtError(e),
+              inputText: prompt,
+            });
+          } finally {
+            clearInterval(actionInterval);
           }
-
-          const sent = await ctx.replyWithPhoto(new InputFile(buffer, "image.png"), {
-            reply_to_message_id: ctx.message!.message_id,
-            reply_markup: imageKeyboard(),
-          });
-          imageControls.set(imageControlKey(tenant.chatId, sent.message_id), {
-            prompt,
-            ownerUserId: tenant.userId!,
-            expiresAt: Date.now() + IMAGE_CONTROL_TTL_MS,
-          });
-          storeConversation(
-            tenant,
-            "assistant",
-            { kind: "image_generated", prompt, messageId: sent.message_id },
-            `generated image: ${prompt.slice(0, 200)} (message_id ${sent.message_id})`
-          );
-          deps.audit.log({
-            ...ctxAudit(ctx),
-            msgType: "image",
-            command: "/image",
-            inputLen: prompt.length,
-            outputLen: 0,
-            latencyMs: Date.now() - t0,
-            status: "ok",
-            inputText: prompt,
-          });
-        } catch (e) {
-          const ms = Date.now() - t0;
-          log.error({ ...serializeError(e), latencyMs: ms }, "Image generation failed");
-          storeConversation(
-            tenant,
-            "assistant",
-            { kind: "image_failed", prompt, error: fmtError(e) },
-            `image generation failed: ${fmtError(e)}`
-          );
-          await sendRichReply(ctx, "**Failed to generate the image.** Please try again.").catch(
-            () => {}
-          );
-          deps.audit.log({
-            ...ctxAudit(ctx),
-            msgType: "image",
-            command: "/image",
-            inputLen: prompt.length,
-            outputLen: 0,
-            latencyMs: ms,
-            status: "error",
-            errorMsg: fmtError(e),
-            inputText: prompt,
-          });
-        } finally {
-          clearInterval(actionInterval);
-        }
+        });
       },
     },
     {

@@ -6,8 +6,12 @@ telegram_polling_lock: "1"
 # intentional one-time reset: Telegram will permanently discard that backlog.
 telegram_drop_pending_updates: "0"
 # Abort a single chat job after 3 minutes so one stuck provider call cannot
-# block every later message in the same Telegram thread.
+# block every later message in the same Telegram thread. Other chats keep
+# running independently.
 telegram_job_timeout_ms: 180000
+# Cap simultaneous LLM jobs across all chats. Each chat still runs one job at
+# a time; different chats share this pool.
+telegram_max_concurrent_jobs: 64
 telegram_max_attachment_bytes: 26214400 # reject Telegram files larger than 25 MiB
 
 # Bot owner / author — surfaced in the system prompt so Skye knows who created

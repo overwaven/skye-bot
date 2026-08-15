@@ -1,6 +1,7 @@
+import { sequentialize } from "@grammyjs/runner";
 import { Bot, type Context as GrammyContext, type NextFunction } from "grammy";
 import type { Contributions } from "../../core/module.js";
-import { tenantFromGrammy } from "../../core/tenant.js";
+import { tenantFromGrammy, threadKey } from "../../core/tenant.js";
 import { checkAccess, type AccessDeps } from "./access.js";
 import { sendRichReply, serializeError } from "./helpers.js";
 import { log } from "../../utils/log.js";
@@ -34,8 +35,17 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
   const threadReferenceImages = new Map<string, string[]>();
   const mediaGroups = new Map<string, MediaGroupEntry>();
 
+  // Keep updates in the same chat/topic ordered, but never block other chats.
+  bot.use(
+    sequentialize((ctx) => {
+      if (!ctx.chat) return [];
+      return [threadKey(tenantFromGrammy(ctx))];
+    })
+  );
+
   // Runs before access checks and handlers: completed updates are durable, so
-  // a restart or duplicate delivery cannot execute commands twice.
+  // a restart or duplicate delivery cannot execute commands twice. LLM work is
+  // queued in the background, so this does not serialize other chats.
   bot.use((ctx, next) => deps.reliability.processUpdate(ctx.update.update_id, ctx.chat?.id, next));
 
   const mention = createMentionHelpers(bot);

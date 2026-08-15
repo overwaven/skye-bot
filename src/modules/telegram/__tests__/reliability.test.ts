@@ -52,6 +52,58 @@ describe("ThreadWorkQueue", () => {
     await queue.whenIdle();
   });
 
+  it("lets a second chat finish while sequential update handling waits to enqueue", async () => {
+    const queue = new ThreadWorkQueue(1_000);
+    const events: string[] = [];
+    let finishFirst!: () => void;
+
+    queue.enqueue(
+      "1",
+      1,
+      async () =>
+        new Promise<void>((resolve) => {
+          finishFirst = resolve;
+        })
+    );
+    const sequentialHandler = async (key: string, chatId: number, label: string) => {
+      queue.enqueue(key, chatId, async () => {
+        events.push(label);
+      });
+    };
+
+    await sequentialHandler("1", 1, "first-chat-followup");
+    await sequentialHandler("2", 2, "second-chat");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual(["second-chat"]);
+
+    finishFirst();
+    await queue.whenIdle();
+    expect(events).toEqual(["second-chat", "first-chat-followup"]);
+  });
+
+  it("caps simultaneous jobs without serializing unrelated chats beyond the cap", async () => {
+    const queue = new ThreadWorkQueue(1_000, 2);
+    let releaseFirst!: () => void;
+    let releaseSecond!: () => void;
+    const thirdStarted = { value: false };
+
+    queue.enqueue("1", 1, () => new Promise<void>((resolve) => (releaseFirst = resolve)));
+    queue.enqueue("2", 2, () => new Promise<void>((resolve) => (releaseSecond = resolve)));
+    queue.enqueue("3", 3, async () => {
+      thirdStarted.value = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(queue.diagnostics().activeJobs).toBe(2);
+    expect(thirdStarted.value).toBe(false);
+
+    releaseFirst();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(thirdStarted.value).toBe(true);
+    releaseSecond();
+    await queue.whenIdle();
+  });
+
   it("does not overlap a successor while a timed-out job is still settling", async () => {
     const queue = new ThreadWorkQueue(15);
     const events: string[] = [];
@@ -136,12 +188,12 @@ describe("TelegramReliabilityService", () => {
     db.close();
   });
 
-  it("persists an update only after its queued work succeeds", async () => {
+  it("marks an update complete after middleware returns, even if queued work is still running", async () => {
     const { db, service } = createService();
     let finishWork!: () => void;
 
-    const processing = service.processUpdate(10, 7, async () => {
-      await service.queue.enqueueAndWait(
+    await service.processUpdate(10, 7, async () => {
+      service.queue.enqueue(
         "chat:7",
         7,
         async () =>
@@ -151,15 +203,12 @@ describe("TelegramReliabilityService", () => {
       );
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(
-      db.prepare("SELECT update_id FROM telegram_processed_updates WHERE update_id = 10").get()
-    ).toBeUndefined();
-    finishWork();
-    await processing;
     expect(
       db.prepare("SELECT update_id FROM telegram_processed_updates WHERE update_id = 10").get()
     ).toEqual({ update_id: 10 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    finishWork();
+    await service.queue.whenIdle();
     db.close();
   });
 
