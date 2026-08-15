@@ -4,6 +4,7 @@ import { adminModule } from "./modules/admin/index.js";
 import { agentRuntimeModule } from "./modules/agentRuntime/index.js";
 import { auditModule } from "./modules/audit/index.js";
 import { billingModule } from "./modules/billing/index.js";
+import { browserModule } from "./modules/browser/index.js";
 import { channelModule } from "./modules/channel/index.js";
 import { chatConfigModule } from "./modules/chatConfig/index.js";
 import { chatLogModule } from "./modules/chatLog/index.js";
@@ -49,6 +50,7 @@ export const modules: readonly SkyeModule[] = [
   monitoringModule,
   jobsModule,
   connectorsModule,
+  browserModule,
   sandboxModule,
   proactiveModule,
   remindersModule,

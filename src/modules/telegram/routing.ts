@@ -18,6 +18,7 @@ import { createRunLlmReply } from "./llmReply.js";
 import { registerMessageHandlers } from "./messageHandlers.js";
 import { registerReminderDelivery } from "./remindersDelivery.js";
 import { uniqByCommand } from "./uiHelpers.js";
+import { createBrowserScreenshotTool } from "./browserTool.js";
 
 export type { TelegramDeps } from "./deps.js";
 
@@ -52,6 +53,13 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     storeConversation: conversation.storeConversation,
   });
 
+  const browserScreenshotTool = createBrowserScreenshotTool({
+    bot,
+    deps,
+    access,
+    storeConversation: conversation.storeConversation,
+  });
+
   const runImageEditCommand = createRunImageEditCommand({
     deps,
     imageControls,
@@ -60,7 +68,11 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
 
   bot.catch((err) => log.error(serializeError(err), "Unhandled bot error"));
 
-  const baseBuiltinTools = [...contributions.tools, generateImageTool];
+  const baseBuiltinTools = [
+    ...contributions.tools,
+    generateImageTool,
+    ...(browserScreenshotTool ? [browserScreenshotTool] : []),
+  ];
 
   const allCommands = buildTelegramCommands({
     deps,

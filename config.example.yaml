@@ -245,6 +245,41 @@ panel:
 # Database path. Supports ":memory:" for ephemeral storage.
 db_path: "data/skye.db"
 
+# Browser automation — a per-chat Chromium session powered by browser-use.
+# The Docker Compose sidecar is private to the application network. Set enabled
+# to true and configure agent credentials to unlock autonomous browser_task;
+# step-by-step actions and screenshots do not require agent credentials.
+browser:
+  enabled: false
+  worker_url: "http://browser-worker:8765"
+  # Must match BROWSER_WORKER_TOKEN in .env when either value is set.
+  worker_token: ""
+  request_timeout_ms: 300000
+  max_output_chars: 20000
+  max_screenshot_bytes: 10485760
+  max_agent_steps: 25
+  viewport_width: 1440
+  viewport_height: 900
+  # When non-empty, browser-use may navigate only to these domains.
+  allowed_domains: []
+  prohibited_domains:
+    - "localhost"
+    - "127.0.0.1"
+    - "::1"
+    - "169.254.169.254"
+    - "host.docker.internal"
+    - "*.localhost"
+    - "*.local"
+    - "*.internal"
+    - "metadata.google.internal"
+    - "browser-worker"
+    - "skye-bot"
+  # Optional overrides. By default these fall back to the legacy top-level
+  # model/key/base_url values. With the unified provider catalog, set them here.
+  agent_model: ""
+  agent_api_key: ""
+  agent_base_url: ""
+
 # Daytona Sandbox — isolated per-chat compute. Daytona applies the
 # organization's tier-based network policy; no per-sandbox network restrictions
 # are sent by Skye. Create an API key at https://app.daytona.io/dashboard/keys.
