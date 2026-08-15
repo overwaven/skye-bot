@@ -6,7 +6,7 @@ const emptyToUndefined = z.preprocess((value) => (value ? value : undefined), z.
 export const browserConfigSchema = z.object({
   browser: section({
     enabled: z.boolean().default(false),
-    worker_url: z.string().url().default("http://browser-worker:8765"),
+    worker_url: z.string().url().default("http://127.0.0.1:8765"),
     worker_token: emptyToUndefined,
     request_timeout_ms: z.number().int().positive().max(900_000).default(300_000),
     max_output_chars: z.number().int().positive().max(200_000).default(20_000),

@@ -1,38 +1,8 @@
 services:
-  browser-worker:
-    build:
-      context: .
-      dockerfile: browser-worker/Dockerfile
-    container_name: skye-browser-worker
-    restart: unless-stopped
-    environment:
-      BROWSER_WORKER_TOKEN: "${BROWSER_WORKER_TOKEN:-}"
-      BROWSER_MAX_SESSIONS: "${BROWSER_MAX_SESSIONS:-2}"
-      BROWSER_IDLE_TTL_SECONDS: "${BROWSER_IDLE_TTL_SECONDS:-900}"
-    shm_size: "1gb"
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3)",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   skye-bot:
     build: .
     container_name: skye-bot
     restart: unless-stopped
-    depends_on:
-      browser-worker:
-        condition: service_healthy
     # Configuration lives in config.yaml. Real environment variables override
     # YAML values (useful for platform-injected secrets like VERCEL_OIDC_TOKEN).
     env_file:

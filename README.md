@@ -27,23 +27,6 @@ pnpm run dev                          # or dev:pretty for human-readable logs
 
 See `AGENTS.md` for the repository conventions.
 
-## Browser automation
-
-Skye can use an isolated Chromium session powered by
-[browser-use](https://github.com/browser-use/browser-use). The first version supports navigation,
-page inspection, clicks, typing, scrolling, tab management, autonomous multi-step tasks, and
-Telegram screenshots with optional vision descriptions.
-
-```bash
-cp config.example.yaml config.yaml
-# Set browser.enabled: true and configure browser.agent_* for autonomous tasks.
-docker compose up --build
-```
-
-Each chat or topic gets a separate temporary browser profile. Sessions expire after inactivity;
-local/private network destinations, secret-like input, and unconfirmed consequential actions are
-blocked. The worker is not published to the host network.
-
 ## Documentation
 
 Skye's full documentation lives on the [website](https://skye-bot.com).

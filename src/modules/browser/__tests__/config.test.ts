@@ -5,7 +5,7 @@ describe("browser config schema", () => {
   it("is disabled by default and applies safe limits", () => {
     const parsed = browserConfigSchema.parse({}).browser;
     expect(parsed.enabled).toBe(false);
-    expect(parsed.worker_url).toBe("http://browser-worker:8765");
+    expect(parsed.worker_url).toBe("http://127.0.0.1:8765");
     expect(parsed.max_agent_steps).toBe(25);
     expect(parsed.viewport_width).toBe(1440);
     expect(parsed.prohibited_domains).toContain("169.254.169.254");

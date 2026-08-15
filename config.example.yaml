@@ -246,12 +246,13 @@ panel:
 db_path: "data/skye.db"
 
 # Browser automation — a per-chat Chromium session powered by browser-use.
-# The Docker Compose sidecar is private to the application network. Set enabled
-# to true and configure agent credentials to unlock autonomous browser_task;
-# step-by-step actions and screenshots do not require agent credentials.
+# Start only the worker with:
+# docker compose -f docker-compose.browser.yml up -d --build
+# Set enabled to true and configure agent credentials to unlock autonomous
+# browser_task; step-by-step actions and screenshots do not require them.
 browser:
   enabled: false
-  worker_url: "http://browser-worker:8765"
+  worker_url: "http://127.0.0.1:8765"
   # Must match BROWSER_WORKER_TOKEN in .env when either value is set.
   worker_token: ""
   request_timeout_ms: 300000

@@ -94,7 +94,7 @@ when the key is absent. **Bounds** = numeric min/max or string length.
 | `browser.viewport_height`     | browser | number  |          | `900`                                                                                                                            |      | ≥ 600, ≤ 1600        |
 | `browser.viewport_width`      | browser | number  |          | `1440`                                                                                                                           |      | ≥ 800, ≤ 2560        |
 | `browser.worker_token`        | browser | string  |          |                                                                                                                                  |      |                      |
-| `browser.worker_url`          | browser | string  |          | `http://browser-worker:8765`                                                                                                     |      |                      |
+| `browser.worker_url`          | browser | string  |          | `http://127.0.0.1:8765`                                                                                                          |      |                      |
 
 ## channel
 
