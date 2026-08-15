@@ -96,6 +96,7 @@ class SessionManager:
                 max_iframe_depth=3,
             )
             browser = BrowserSession(id=session_id, browser_profile=profile)
+            await browser.start()
             session = WorkerSession(browser=browser, profile_path=profile_path)
             self.sessions[session_id] = session
             return session
