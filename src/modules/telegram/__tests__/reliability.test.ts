@@ -52,6 +52,30 @@ describe("ThreadWorkQueue", () => {
     await queue.whenIdle();
   });
 
+  it("does not wait for one user's private-chat job before answering their group chat", async () => {
+    const queue = new ThreadWorkQueue(1_000);
+    const userId = 42;
+    const events: string[] = [];
+    let finishPrivate!: () => void;
+
+    queue.enqueue(
+      String(userId),
+      userId,
+      () =>
+        new Promise<void>((resolve) => {
+          finishPrivate = resolve;
+        })
+    );
+    queue.enqueue("-100555", -100555, async () => {
+      events.push("group-hello");
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events).toEqual(["group-hello"]);
+    finishPrivate();
+    await queue.whenIdle();
+  });
+
   it("lets a second chat finish while sequential update handling waits to enqueue", async () => {
     const queue = new ThreadWorkQueue(1_000);
     const events: string[] = [];

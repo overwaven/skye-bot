@@ -175,7 +175,6 @@ export function installTelegram(bot: Bot, deps: TelegramDeps, contributions: Con
     collectReplyMedia: media.collectReplyMedia,
     storeConversation: conversation.storeConversation,
     contextFor: conversation.contextFor,
-    withBillingLock: conversation.withBillingLock,
   });
 
   registerMessageHandlers({
