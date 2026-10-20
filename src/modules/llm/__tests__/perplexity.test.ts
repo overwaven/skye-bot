@@ -158,6 +158,43 @@ describe("Perplexity Agent API adapter", () => {
     ]);
   });
 
+  it("attributes requests only when targeting api.perplexity.ai", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) =>
+      String(input).endsWith("/models")
+        ? new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(JSON.stringify(agentResponse("ok")), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const headersFor = (call: number) =>
+      new Headers((fetchMock.mock.calls[call] as [RequestInfo | URL, RequestInit])[1].headers);
+
+    for (const baseUrl of [
+      "https://api.perplexity.ai/v1",
+      "https://proxy.example.com/v1",
+      "https://api.perplexity.ai.example.com/v1",
+    ]) {
+      fetchMock.mockClear();
+      const adapter = new PerplexityAgentAdapter({ apiKey: "pplx-test", baseUrl });
+      await adapter.ask({
+        model: "perplexity/sonar",
+        instructions: "Be concise.",
+        input: "Hi",
+        maxOutputTokens: 8,
+      });
+      await fetchPerplexityModels({ apiKey: "pplx-test", baseUrl });
+
+      const expected = baseUrl === "https://api.perplexity.ai/v1" ? "skye-bot" : null;
+      expect(headersFor(0).get("x-pplx-integration")).toBe(expected);
+      expect(headersFor(1).get("x-pplx-integration")).toBe(expected);
+    }
+  });
+
   it("preserves function calls and results across Agent API rounds", () => {
     expect(
       toPerplexityInput([

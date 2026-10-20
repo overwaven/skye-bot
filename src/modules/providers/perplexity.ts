@@ -2,11 +2,20 @@ import Perplexity from "@perplexity-ai/perplexity_ai";
 import type { ProviderCredentials } from "./types.js";
 
 const PROBE_MODEL = "perplexity/sonar";
+const PERPLEXITY_API_HOST = "api.perplexity.ai";
+const INTEGRATION_HEADER = "X-Pplx-Integration";
+const INTEGRATION_SLUG = "skye-bot";
 
 export function perplexitySdkBaseUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
   url.pathname = url.pathname.replace(/\/+$/, "").replace(/\/v1$/, "");
   return url.toString().replace(/\/$/, "");
+}
+
+export function perplexityAttributionHeaders(baseUrl: string): Record<string, string> {
+  return new URL(baseUrl).hostname.toLowerCase() === PERPLEXITY_API_HOST
+    ? { [INTEGRATION_HEADER]: INTEGRATION_SLUG }
+    : {};
 }
 
 export function createPerplexityClient(
@@ -17,6 +26,7 @@ export function createPerplexityClient(
     apiKey: credentials.apiKey,
     baseURL: perplexitySdkBaseUrl(credentials.baseUrl),
     maxRetries: options.maxRetries,
+    defaultHeaders: perplexityAttributionHeaders(credentials.baseUrl),
   });
 }
 
@@ -47,7 +57,10 @@ export async function fetchPerplexityModels(
   provider: Pick<ProviderCredentials, "apiKey" | "baseUrl">
 ): Promise<Array<Record<string, unknown>>> {
   const response = await fetch(`${perplexitySdkBaseUrl(provider.baseUrl)}/v1/models`, {
-    headers: { Authorization: `Bearer ${provider.apiKey}` },
+    headers: {
+      ...perplexityAttributionHeaders(provider.baseUrl),
+      Authorization: `Bearer ${provider.apiKey}`,
+    },
     signal: AbortSignal.timeout(15_000),
   });
   if (!response.ok) {
